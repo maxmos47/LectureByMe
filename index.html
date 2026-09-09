@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B3A40">
+<title>Triage Session · เข้าร่วม</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B2A2E; --paper:#F5F4F0; --paper-raised:#FFFFFF; --line:#E3E6E2;
+    --teal:#12525A; --teal-deep:#0A2E33; --teal-soft:#EAF3F2;
+    --l1:#D6453D; --l2:#E8873A; --l3:#DDAE1F; --l4:#3F9163; --l5:#3E7FA6;
+    --shadow-sm:0 1px 2px rgba(11,46,51,.05), 0 1px 3px rgba(11,46,51,.06);
+    --shadow-md:0 4px 14px rgba(11,46,51,.08), 0 2px 4px rgba(11,46,51,.04);
+    --radius-lg:18px; --radius-md:12px; --radius-sm:9px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0; font-family:'IBM Plex Sans Thai','IBM Plex Sans',-apple-system,"Segoe UI",sans-serif;
+    background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased;}
+  .app{max-width:520px; margin:0 auto; padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 48px); min-height:100vh;}
+  @keyframes fadeInUp{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .card{ animation:fadeInUp .28s ease both; }
+
+  .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 0 14px; margin:0 -16px 18px; padding-left:16px; padding-right:16px;
+    background:var(--paper); border-bottom:1px solid var(--line);}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand .dot-logo{width:32px; height:32px; border-radius:10px; background:linear-gradient(145deg,var(--teal),var(--teal-deep));
+    flex-shrink:0; box-shadow:var(--shadow-sm);}
+  .brand .mark{font-size:11px; color:var(--teal); font-weight:700; letter-spacing:.04em;}
+  .brand h1{font-size:17px; margin:1px 0 0; font-weight:700; color:var(--teal-deep); line-height:1.2;}
+  .badge{font-size:11.5px; padding:5px 11px; border-radius:20px; background:var(--teal); color:#fff; display:none; font-weight:600;}
+
+  .card{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:20px; margin-bottom:14px; box-shadow:var(--shadow-sm);}
+  .lead{font-size:14.5px; color:#4A5754; margin:0 0 16px; line-height:1.65;}
+  label{display:block; font-size:13px; font-weight:600; color:var(--teal-deep); margin-bottom:7px;}
+  input[type=text]{width:100%; padding:13px 14px; border:1.5px solid var(--line); border-radius:var(--radius-sm);
+    font-size:16px; margin-bottom:14px; background:var(--paper); color:var(--ink); transition:border-color .15s;}
+  input:focus{outline:none; border-color:var(--teal);}
+  #codeInput{text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
+  button{-webkit-tap-highlight-color:transparent;}
+  button.primary{background:var(--teal); color:#fff; border:none; border-radius:var(--radius-sm); padding:14px 18px;
+    font-size:15.5px; font-weight:600; cursor:pointer; width:100%; min-height:50px; box-shadow:var(--shadow-sm);
+    transition:transform .08s, background .15s;}
+  @media (hover:hover){ button.primary:hover{background:var(--teal-deep);} }
+  button.primary:active{transform:scale(.98);}
+  button.primary:disabled{opacity:.4; cursor:not-allowed; transform:none;}
+  button.ghost{background:var(--paper-raised); color:var(--teal); border:1.5px solid var(--teal); border-radius:var(--radius-sm);
+    padding:12px 16px; font-size:14px; cursor:pointer; min-height:46px; font-weight:600; transition:transform .08s, background .15s;}
+  button.ghost:active{transform:scale(.98); background:var(--teal-soft);}
+  .case-box{background:var(--teal-soft); border-left:4px solid var(--teal); border-radius:var(--radius-sm); padding:16px 17px;
+    margin-bottom:16px; font-size:15.5px; line-height:1.65;}
+  .option{display:flex; align-items:center; gap:12px; border:1.5px solid var(--line); border-radius:var(--radius-sm);
+    padding:15px 16px; margin-bottom:10px; cursor:pointer; font-size:15px; background:var(--paper-raised);
+    transition:border-color .15s, background .15s, transform .08s;}
+  .option:active{transform:scale(.985);}
+  .option.selected{border-color:var(--teal); background:var(--teal-soft); font-weight:600;}
+  .dot{width:18px; height:18px; border-radius:50%; border:2px solid var(--line); flex-shrink:0; transition:border-color .15s, background .15s;}
+  .option.selected .dot{border-color:var(--teal); background:var(--teal); box-shadow:inset 0 0 0 3px #fff;}
+  .linkbtn{display:block; width:100%; text-align:center; background:none; border:none; color:var(--teal);
+    font-size:13.5px; padding:14px 10px 4px; cursor:pointer; font-weight:600;}
+  .swatch{width:11px; height:11px; border-radius:50%; flex-shrink:0;}
+  .status-box{text-align:center; padding:40px 14px; color:#6B7674; font-size:15px;}
+  .status-box .big{font-size:19px; color:var(--teal-deep); font-weight:700; margin-bottom:8px;}
+  .qtag{font-size:12px; font-weight:700; color:var(--teal); margin-bottom:6px; letter-spacing:.02em;}
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px;}
+  .stat-box{background:var(--paper); border-radius:var(--radius-md); padding:16px 12px; text-align:center;}
+  .stat-box .num{font-size:25px; font-weight:700; color:var(--teal-deep); line-height:1.2;}
+  .stat-box .lab{font-size:11.5px; color:#6B7674; margin-top:3px; font-weight:500;}
+  .delta-up{color:var(--l4);} .delta-down{color:var(--l1);} .delta-flat{color:#8A9391;}
+  .error-text{color:var(--l1); font-size:13px; margin:-8px 0 12px;}
+  .nav-row{display:flex; gap:10px; margin-top:14px;} .nav-row > *{flex:1;}
+  .small-muted{font-size:12px; color:#8A9391; margin-top:12px; text-align:center; line-height:1.5;}
+  .celebrate{width:64px; height:64px; border-radius:50%; background:linear-gradient(145deg,var(--teal),var(--teal-deep));
+    margin:0 auto 16px; display:flex; align-items:center; justify-content:center; font-size:28px; box-shadow:var(--shadow-md);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="dot-logo"></div>
+      <div>
+        <span class="mark">ER TRIAGE</span>
+        <h1 id="titleText">เข้าร่วมการบรรยาย</h1>
+      </div>
+    </div>
+    <span class="badge" id="roleBadge"></span>
+  </div>
+  <div id="root"><div class="card"><div class="status-box">กำลังเตรียมระบบ...</div></div></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, inMemoryPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc,
+  collection, query, where, getDocs, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDNO-XsILUd4_Wm6WPiJUCd4t032GYAzx4",
+  authDomain: "lecturebymyself-44dd8.firebaseapp.com",
+  projectId: "lecturebymyself-44dd8",
+  storageBucket: "lecturebymyself-44dd8.firebasestorage.app",
+  messagingSenderId: "633622263197",
+  appId: "1:633622263197:web:58dd3900599a34e2b12b74",
+  measurementId: "G-BEW4ZE5WSR"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+const OPTIONS_DEFAULT = ["Level 1 (แดง)","Level 2 (ส้ม)","Level 3 (เหลือง)","Level 4 (เขียว)","Level 5 (ขาว)"];
+const LEVEL_COLORS = ["var(--l1)","var(--l2)","var(--l3)","var(--l4)","var(--l5)"];
+
+const root = document.getElementById('root');
+const titleText = document.getElementById('titleText');
+const roleBadge = document.getElementById('roleBadge');
+
+let uid = null;
+let classroomId = null;
+let className = '';
+let myName = '';
+let classroom = null; // live snapshot data
+let unsubRoom = null;
+let questionCache = {};
+let answeredSet = new Set();
+
+function swatch(i){ return `<span class="swatch" style="background:${LEVEL_COLORS[i]}"></span>`; }
+
+setPersistence(auth, inMemoryPersistence).then(()=>{
+  onAuthStateChanged(auth, (user)=>{
+    if(user){ uid = user.uid; renderJoin(); }
+  });
+  signInAnonymously(auth).catch(err=>{
+    root.innerHTML = `<div class="card"><div class="status-box">เข้าสู่ระบบไม่สำเร็จ: ${err.message}</div></div>`;
+  });
+});
+
+async function getQuestion(topicId, qid){
+  if(questionCache[qid]) return questionCache[qid];
+  try{
+    const snap = await getDoc(doc(db,'question_bank',topicId,'questions',qid));
+    if(snap.exists()){ questionCache[qid] = { id:qid, ...snap.data() }; return questionCache[qid]; }
+  }catch(e){}
+  return { case:'(ไม่พบคำถาม)', options: OPTIONS_DEFAULT, correct:0 };
+}
+
+// ---------- JOIN ----------
+function renderJoin(){
+  titleText.textContent = "เข้าร่วมการบรรยาย";
+  root.innerHTML = `
+    <div class="card">
+      <label for="codeInput">รหัส Classroom</label>
+      <input type="text" id="codeInput" placeholder="เช่น A7K2P" maxlength="8">
+      <label for="nameInput">ชื่อ-นามสกุล</label>
+      <input type="text" id="nameInput" placeholder="เช่น สมหญิง ใจดี">
+      <label for="deptInput">หน่วยงาน (ถ้ามี)</label>
+      <input type="text" id="deptInput" placeholder="เช่น ER">
+      <div class="error-text" id="errText" style="display:none;"></div>
+      <button class="primary" id="joinBtn">เข้าร่วม</button>
+    </div>
+  `;
+  document.getElementById('joinBtn').addEventListener('click', doJoin);
+}
+
+async function doJoin(){
+  const errText = document.getElementById('errText');
+  const btn = document.getElementById('joinBtn');
+  const codeVal = document.getElementById('codeInput').value.trim().toUpperCase();
+  const name = document.getElementById('nameInput').value.trim();
+  const dept = document.getElementById('deptInput').value.trim();
+  if(!codeVal || !name){
+    errText.textContent = 'กรุณากรอกรหัส Classroom และชื่อให้ครบ';
+    errText.style.display = 'block';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'กำลังเข้าร่วม...';
+
+  const q = query(collection(db,'classrooms'), where('code','==',codeVal));
+  const snap = await getDocs(q);
+  if(snap.empty){
+    errText.textContent = 'ไม่พบ Classroom นี้ กรุณาตรวจสอบรหัสอีกครั้ง';
+    errText.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'เข้าร่วม';
+    return;
+  }
+  const roomDoc = snap.docs[0];
+  classroomId = roomDoc.id;
+  className = roomDoc.data().name;
+  myName = name;
+
+  await setDoc(doc(db,'classrooms',classroomId,'students',uid), {
+    name, dept, joinedAt: new Date().toISOString(),
+    pretestAnswers: {}, posttestAnswers: {}
+  });
+
+  roleBadge.style.display = 'inline-block';
+  roleBadge.textContent = myName + ' · ' + className;
+
+  unsubRoom = onSnapshot(doc(db,'classrooms',classroomId), (s)=>{
+    if(!s.exists()) return;
+    classroom = { id:classroomId, ...s.data() };
+    renderParticipant();
+  });
+}
+
+// ---------- PARTICIPANT VIEW (presenter drives which question is active) ----------
+let showingMySummary = false;
+let myAnswers = { pretestAnswers:{}, posttestAnswers:{} };
+let postIdx = 0;
+let posttestSubmitted = false;
+
+function bottomLink(){
+  return `<button class="linkbtn" id="mySummaryLink">${showingMySummary ? '← กลับไปหน้าคำถาม' : 'ดูสรุปคะแนนของฉัน (Pre vs Post)'}</button>`;
+}
+function bindBottomLink(){
+  document.getElementById('mySummaryLink').addEventListener('click', ()=>{
+    showingMySummary = !showingMySummary;
+    renderParticipant();
+  });
+}
+
+async function renderParticipant(){
+  titleText.textContent = "ผู้ฟัง";
+  const mode = classroom.mode || 'lobby';
+
+  if(mode === 'ended'){
+    return renderEndedScreen();
+  }
+
+  if(showingMySummary){
+    await renderMySummary();
+    return;
+  }
+
+  if(mode === 'lobby'){
+    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">พร้อมแล้ว</div>รอผู้บรรยายเริ่มกิจกรรม</div></div>` + bottomLink();
+    bindBottomLink();
+    return;
+  }
+  if(mode === 'lecture'){
+    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">กำลังบรรยาย</div>ฟังเนื้อหาต่อได้เลย</div></div>` + bottomLink();
+    bindBottomLink();
+    return;
+  }
+  if(mode === 'pretest'){
+    return renderActiveQuestion('pretest');
+  }
+  if(mode === 'posttest'){
+    return renderPosttest();
+  }
+  root.innerHTML = `<div class="card"><div class="status-box">รอสักครู่...</div></div>`;
+}
+
+async function renderEndedScreen(){
+  titleText.textContent = "จบการบรรยาย";
+  root.innerHTML = `<div class="card"><div class="status-box">กำลังสรุปคะแนนของคุณ...</div></div>`;
+
+  const preIds = classroom.pretestQuestionIds, postIds = classroom.posttestQuestionIds;
+  await Promise.all(preIds.map(qid=>getQuestion(classroom.pretestTopicId, qid)));
+  await Promise.all(postIds.map(qid=>getQuestion(classroom.posttestTopicId, qid)));
+
+  function breakdown(ans, ids){
+    let correct=0, under=0, over=0, answered=0;
+    ids.forEach(qid=>{
+      const q = questionCache[qid];
+      if(!q || ans?.[qid]===undefined) return;
+      answered++;
+      const d = ans[qid] - q.correct;
+      if(d===0) correct++; else if(d>0) under++; else over++;
+    });
+    return { correct, under, over, answered };
+  }
+  const preB = breakdown(myAnswers.pretestAnswers, preIds);
+  const postB = breakdown(myAnswers.posttestAnswers, postIds);
+  const delta = postB.correct - preB.correct;
+  const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-flat');
+  const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
+
+  root.innerHTML = `
+    <div class="card" style="text-align:center;">
+      <div class="celebrate">🎉</div>
+      <div class="status-box" style="padding:0;">
+        <div class="big" style="font-size:20px;">ขอบคุณที่เข้าร่วม!</div>
+        <div>${myName}${className ? ' · '+className : ''}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="lead">คะแนนของคุณ</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">${preB.correct}/${preIds.length}</div><div class="lab">Pretest</div></div>
+        <div class="stat-box"><div class="num">${postB.correct}/${postIds.length}</div><div class="lab">Post-test</div></div>
+      </div>
+      <div class="status-box" style="padding-top:6px;">
+        <span class="${deltaClass}" style="font-size:22px; font-weight:700;">${deltaLabel} คะแนน</span><br>
+        <span style="font-size:13px;">พัฒนาการก่อน-หลังการบรรยาย</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="lead" style="margin-bottom:12px;">การประเมิน Triage ของคุณ</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" style="color:var(--l1);">${preB.under} → ${postB.under}</div><div class="lab">Undertriage (ข้อ)</div></div>
+        <div class="stat-box"><div class="num" style="color:var(--l5);">${preB.over} → ${postB.over}</div><div class="lab">Overtriage (ข้อ)</div></div>
+      </div>
+      <div class="small-muted" style="text-align:left;">
+        Undertriage = ประเมินผู้ป่วยหย่อนกว่าความรุนแรงจริง (เสี่ยงอันตรายที่สุด ควรระวังเป็นพิเศษ)<br>
+        Overtriage = ประเมินเข้มกว่าความจำเป็นจริง (ปลอดภัยกว่าแต่ใช้ทรัพยากรเกิน)
+      </div>
+    </div>
+  `;
+}
+
+async function renderActiveQuestion(phase){
+  const ids = phase==='pretest' ? classroom.pretestQuestionIds : classroom.posttestQuestionIds;
+  const topicId = phase==='pretest' ? classroom.pretestTopicId : classroom.posttestTopicId;
+  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const qid = classroom.activeQid;
+
+  if(!qid || !ids.includes(qid)){
+    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">รอผู้บรรยาย</div>กำลังจะส่งคำถามข้อถัดไปให้เร็วๆ นี้</div></div>` + bottomLink();
+    bindBottomLink();
+    return;
+  }
+
+  const answeredCount = Object.keys(myAnswers[field]).length;
+  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
+  const q = await getQuestion(topicId, qid);
+  const opts = q.options || OPTIONS_DEFAULT;
+  const currentAnswer = myAnswers[field][qid];
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="qtag">${phase === 'pretest' ? 'PRETEST' : 'POST-TEST'} · ตอบไปแล้ว ${answeredCount}/${ids.length} ข้อ</div>
+      <div class="case-box">${q.case}</div>
+      <div id="optWrap"></div>
+    </div>
+  ` + bottomLink();
+
+  const wrap = document.getElementById('optWrap');
+  opts.forEach((opt, oIdx)=>{
+    const div = document.createElement('div');
+    div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
+    div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
+    div.addEventListener('click', async ()=>{
+      myAnswers[field][qid] = oIdx;
+      try{
+        await updateDoc(doc(db,'classrooms',classroomId,'students',uid), { [`${field}.${qid}`]: oIdx });
+      }catch(e){}
+      renderActiveQuestion(phase);
+    });
+    wrap.appendChild(div);
+  });
+  bindBottomLink();
+}
+
+async function renderPosttest(){
+  const ids = classroom.posttestQuestionIds;
+  const topicId = classroom.posttestTopicId;
+
+  if(posttestSubmitted){
+    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">ส่งคำตอบเรียบร้อยแล้ว</div>รอผลจากผู้บรรยาย</div></div>` + bottomLink();
+    bindBottomLink();
+    return;
+  }
+
+  if(postIdx >= ids.length) postIdx = ids.length - 1;
+  const idx = Math.max(0, postIdx);
+  const qid = ids[idx];
+  const answeredCount = Object.keys(myAnswers.posttestAnswers).length;
+  const isLast = idx === ids.length - 1;
+
+  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
+  const q = await getQuestion(topicId, qid);
+  const opts = q.options || OPTIONS_DEFAULT;
+  const currentAnswer = myAnswers.posttestAnswers[qid];
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="qtag">POST-TEST · ข้อ ${idx+1}/${ids.length} · ตอบแล้ว ${answeredCount}/${ids.length}</div>
+      <div class="case-box">${q.case}</div>
+      <div id="optWrap"></div>
+      <div class="nav-row">
+        <button class="ghost" id="prevBtn" style="flex:1;" ${idx===0?'disabled':''}>ย้อนกลับ</button>
+        ${isLast
+          ? `<button class="primary" id="submitBtn" style="flex:1;">ส่งคำตอบ (Submit)</button>`
+          : `<button class="primary" id="nextBtn" style="flex:1;">ข้อถัดไป</button>`}
+      </div>
+      ${!isLast ? `<button class="linkbtn" id="earlySubmitBtn">ส่งคำตอบตอนนี้เลย (ยังไม่ต้องรอทำครบ)</button>` : ''}
+    </div>
+  ` + bottomLink();
+
+  const wrap = document.getElementById('optWrap');
+  opts.forEach((opt, oIdx)=>{
+    const div = document.createElement('div');
+    div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
+    div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
+    div.addEventListener('click', ()=>{
+      myAnswers.posttestAnswers[qid] = oIdx;
+      renderPosttest();
+    });
+    wrap.appendChild(div);
+  });
+
+  document.getElementById('prevBtn').addEventListener('click', ()=>{ postIdx = Math.max(0, idx-1); renderPosttest(); });
+  if(isLast){
+    document.getElementById('submitBtn').addEventListener('click', submitPosttest);
+  } else {
+    document.getElementById('nextBtn').addEventListener('click', ()=>{ postIdx = Math.min(ids.length-1, idx+1); renderPosttest(); });
+    document.getElementById('earlySubmitBtn').addEventListener('click', submitPosttest);
+  }
+  bindBottomLink();
+}
+
+async function submitPosttest(){
+  try{
+    await updateDoc(doc(db,'classrooms',classroomId,'students',uid), {
+      posttestAnswers: myAnswers.posttestAnswers,
+      posttestSubmittedAt: new Date().toISOString()
+    });
+  }catch(e){}
+  posttestSubmitted = true;
+  renderPosttest();
+}
+
+async function renderMySummary(){
+  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคะแนนของคุณ...</div></div>`;
+
+  const preIds = classroom.pretestQuestionIds, postIds = classroom.posttestQuestionIds;
+  await Promise.all(preIds.map(qid=>getQuestion(classroom.pretestTopicId, qid)));
+  await Promise.all(postIds.map(qid=>getQuestion(classroom.posttestTopicId, qid)));
+
+  function breakdown(ans, ids){
+    let correct=0, under=0, over=0, answered=0;
+    ids.forEach(qid=>{
+      const q = questionCache[qid];
+      if(!q || ans?.[qid]===undefined) return;
+      answered++;
+      const d = ans[qid] - q.correct;
+      if(d===0) correct++; else if(d>0) under++; else over++;
+    });
+    return { correct, under, over, answered };
+  }
+  const preB = breakdown(myAnswers.pretestAnswers, preIds);
+  const postB = breakdown(myAnswers.posttestAnswers, postIds);
+
+  const delta = postB.correct - preB.correct;
+  const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-flat');
+  const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="lead">ผลคะแนนของคุณ · ${myName}</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">${preB.correct}/${preIds.length}</div><div class="lab">Pretest (ตอบแล้ว ${preB.answered})</div></div>
+        <div class="stat-box"><div class="num">${postB.correct}/${postIds.length}</div><div class="lab">Post-test (ตอบแล้ว ${postB.answered})</div></div>
+      </div>
+      <div class="status-box" style="padding-top:6px;">
+        <span class="${deltaClass}" style="font-size:20px; font-weight:700;">${deltaLabel} คะแนน</span><br>
+        <span style="font-size:13px;">เทียบก่อน-หลัง (จากเท่าที่ตอบแล้ว)</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="lead" style="margin-bottom:12px;">การประเมิน Triage ของคุณ</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" style="color:var(--l1);">${preB.under} → ${postB.under}</div><div class="lab">Undertriage (ข้อ)</div></div>
+        <div class="stat-box"><div class="num" style="color:var(--l5);">${preB.over} → ${postB.over}</div><div class="lab">Overtriage (ข้อ)</div></div>
+      </div>
+      <div class="small-muted" style="text-align:left;">
+        Undertriage = ประเมินผู้ป่วยหย่อนกว่าความรุนแรงจริง (เสี่ยงอันตรายที่สุด ควรระวังเป็นพิเศษ)<br>
+        Overtriage = ประเมินเข้มกว่าความจำเป็นจริง (ปลอดภัยกว่าแต่ใช้ทรัพยากรเกิน)
+      </div>
+    </div>
+  ` + bottomLink();
+  bindBottomLink();
+}
+</script>
+</body>
+</html>
