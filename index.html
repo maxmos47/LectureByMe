@@ -86,7 +86,7 @@
     <div class="brand">
       <div class="dot-logo"></div>
       <div>
-        <span class="mark">Participants</span>
+        <span class="mark">PARTICIPANTS</span>
         <h1 id="titleText">เข้าร่วมการบรรยาย</h1>
       </div>
     </div>
@@ -286,6 +286,7 @@ async function renderEndedScreen(){
   const delta = postB.correct - preB.correct;
   const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-flat');
   const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
+  const triageMode = classroom.triageMode !== false;
 
   root.innerHTML = `
     <div class="card" style="text-align:center;">
@@ -306,6 +307,7 @@ async function renderEndedScreen(){
         <span style="font-size:13px;">พัฒนาการก่อน-หลังการบรรยาย</span>
       </div>
     </div>
+    ${triageMode ? `
     <div class="card">
       <div class="lead" style="margin-bottom:12px;">การประเมิน Triage ของคุณ</div>
       <div class="stat-grid">
@@ -316,7 +318,7 @@ async function renderEndedScreen(){
         Undertriage = ประเมินผู้ป่วยหย่อนกว่าความรุนแรงจริง (เสี่ยงอันตรายที่สุด ควรระวังเป็นพิเศษ)<br>
         Overtriage = ประเมินเข้มกว่าความจำเป็นจริง (ปลอดภัยกว่าแต่ใช้ทรัพยากรเกิน)
       </div>
-    </div>
+    </div>` : ''}
   `;
 }
 
@@ -456,6 +458,7 @@ async function renderMySummary(){
   const delta = postB.correct - preB.correct;
   const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-flat');
   const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;
+  const triageMode = classroom.triageMode !== false;
 
   root.innerHTML = `
     <div class="card">
@@ -469,6 +472,7 @@ async function renderMySummary(){
         <span style="font-size:13px;">เทียบก่อน-หลัง (จากเท่าที่ตอบแล้ว)</span>
       </div>
     </div>
+    ${triageMode ? `
     <div class="card">
       <div class="lead" style="margin-bottom:12px;">การประเมิน Triage ของคุณ</div>
       <div class="stat-grid">
@@ -479,7 +483,7 @@ async function renderMySummary(){
         Undertriage = ประเมินผู้ป่วยหย่อนกว่าความรุนแรงจริง (เสี่ยงอันตรายที่สุด ควรระวังเป็นพิเศษ)<br>
         Overtriage = ประเมินเข้มกว่าความจำเป็นจริง (ปลอดภัยกว่าแต่ใช้ทรัพยากรเกิน)
       </div>
-    </div>
+    </div>` : ''}
   ` + bottomLink();
   bindBottomLink();
 }

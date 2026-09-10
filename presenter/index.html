@@ -175,7 +175,7 @@ let selectedTopicId = null;
 let csvPreview = null; // {valid:[], invalid:[]}
 
 let presenterAuthed = false;
-const PRESENTER_PASSCODE = "2851"; // TODO: เปลี่ยนรหัสผ่านตรงนี้เป็นของคุณเอง
+const PRESENTER_PASSCODE = "triage2026"; // TODO: เปลี่ยนรหัสผ่านตรงนี้เป็นของคุณเอง
 
 function swatch(i){ return `<span class="swatch" style="background:${LEVEL_COLORS[i]}"></span>`; }
 function genCode(){
@@ -296,10 +296,10 @@ async function renderClassroomsList(){
 }
 
 // ============ CLASSROOM CREATE ============
-let newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10 };
+let newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10, triageMode:true };
 
 async function renderClassroomNew(){
-  newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10 };
+  newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10, triageMode:true };
   root.innerHTML = navBar() + `<div class="card"><div class="status-box">กำลังโหลดคลังข้อสอบ...</div></div>`;
   bindNav();
   const topics = await fetchTopics();
@@ -328,10 +328,27 @@ async function renderClassroomNew(){
       <div class="small-muted" id="postAvailHint" style="text-align:left; margin-top:-8px;"></div>
     </div>
     <div class="card">
+      <label style="margin-bottom:10px;">3. รูปแบบการให้คะแนน</label>
+      <div class="qcheckrow checked" id="triageModeRow">
+        <input type="checkbox" id="triageModeCheck" checked>
+        <div>
+          <strong style="font-size:13.5px;">เปิดการวิเคราะห์ Undertriage / Overtriage</strong>
+          <div style="font-size:12.5px; color:#6B7674; margin-top:2px;">เหมาะกับคำถามที่เป็นการจัดระดับความรุนแรง 5 ระดับ (เช่น Triage) ถ้าปิดไว้ ระบบจะคิดคะแนนแบบถูก/ผิดปกติเท่านั้น เหมาะกับหัวข้ออื่นที่ไม่ใช่การจัดระดับความรุนแรง</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <button class="primary" id="createRoomBtn" disabled>สร้าง Classroom</button>
     </div>
   `;
   bindNav();
+
+  document.getElementById('triageModeRow').addEventListener('click', ()=>{
+    newRoomState.triageMode = !newRoomState.triageMode;
+    const row = document.getElementById('triageModeRow');
+    row.classList.toggle('checked', newRoomState.triageMode);
+    document.getElementById('triageModeCheck').checked = newRoomState.triageMode;
+  });
 
   root.querySelectorAll('#preTopicPills .topicpill').forEach(p=>{
     p.addEventListener('click', async ()=>{
@@ -414,6 +431,7 @@ async function createClassroom(){
     name: newRoomState.name.trim(),
     code, presenterUid: uid, createdAt: serverTimestamp(),
     mode:'lobby', activeQid:null, pretestSentIds:[], posttestSentIds:[],
+    triageMode: newRoomState.triageMode,
     pretestTopicId: newRoomState.pretestTopicId,
     pretestQuestionIds: newRoomState.pretestSelected,
     posttestTopicId: newRoomState.posttestTopicId,
@@ -552,6 +570,7 @@ async function renderLiveLeaderboard(phase){
   const wrap = document.getElementById('resultsContent');
   const ids = phase==='pretest' ? currentClassroom.pretestQuestionIds : currentClassroom.posttestQuestionIds;
   const topicId = phase==='pretest' ? currentClassroom.pretestTopicId : currentClassroom.posttestTopicId;
+  const triageMode = currentClassroom.triageMode !== false;
   await ensureQuestionsCached(ids, topicId);
 
   const results = currentStudents.map(s=>{
@@ -561,33 +580,46 @@ async function renderLiveLeaderboard(phase){
 
   const n = results.length;
   const started = results.filter(r=>r.answered>0).length;
-  const agg = aggregateTriage(currentStudents, phase, ids);
-  const underPct = agg.answered ? Math.round((agg.under/agg.answered)*100) : 0;
-  const overPct = agg.answered ? Math.round((agg.over/agg.answered)*100) : 0;
   const avgAmongStarted = started ? results.filter(r=>r.answered>0).reduce((s,r)=>s+r.correct,0)/started : 0;
 
-  const rows = results.map((r,i)=>`
+  let triageStatsHtml = '';
+  let underOverCols = '';
+  let underOverHeader = '';
+  if(triageMode){
+    const agg = aggregateTriage(currentStudents, phase, ids);
+    const underPct = agg.answered ? Math.round((agg.under/agg.answered)*100) : 0;
+    const overPct = agg.answered ? Math.round((agg.over/agg.answered)*100) : 0;
+    triageStatsHtml = `
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" style="color:var(--l1);">${underPct}%</div><div class="lab">Undertriage</div></div>
+        <div class="stat-box"><div class="num" style="color:var(--l5);">${overPct}%</div><div class="lab">Overtriage</div></div>
+      </div>
+    `;
+    underOverHeader = `<th>Under</th><th>Over</th>`;
+  }
+
+  const rows = results.map((r,i)=>{
+    underOverCols = triageMode
+      ? `<td style="color:var(--l1); font-weight:600;">${r.under}</td><td style="color:var(--l5); font-weight:600;">${r.over}</td>`
+      : '';
+    return `
     <tr>
       <td>${i===0 && r.answered>0 ? '🥇 ' : ''}${r.name}${r.dept?' · '+r.dept:''}</td>
       <td>${r.correct}/${ids.length}</td>
       <td style="color:#6B7674;">${r.answered}/${ids.length}</td>
-      <td style="color:var(--l1); font-weight:600;">${r.under}</td>
-      <td style="color:var(--l5); font-weight:600;">${r.over}</td>
+      ${underOverCols}
     </tr>
-  `).join('');
+  `;}).join('');
 
   wrap.innerHTML = `
     <div class="stat-grid" style="margin-top:12px;">
       <div class="stat-box"><div class="num">${started}/${n}</div><div class="lab">เริ่มทำแล้ว</div></div>
       <div class="stat-box"><div class="num">${avgAmongStarted.toFixed(1)}/${ids.length}</div><div class="lab">คะแนนเฉลี่ย (เท่าที่ตอบ)</div></div>
     </div>
-    <div class="stat-grid">
-      <div class="stat-box"><div class="num" style="color:var(--l1);">${underPct}%</div><div class="lab">Undertriage</div></div>
-      <div class="stat-box"><div class="num" style="color:var(--l5);">${overPct}%</div><div class="lab">Overtriage</div></div>
-    </div>
+    ${triageStatsHtml}
     <div style="max-height:320px; overflow-y:auto; margin-top:10px;">
-      <table><thead><tr><th>ชื่อ</th><th>คะแนน</th><th>ตอบแล้ว</th><th>Under</th><th>Over</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan=5>ยังไม่มีผู้เริ่มทำ</td></tr>'}</tbody></table>
+      <table><thead><tr><th>ชื่อ</th><th>คะแนน</th><th>ตอบแล้ว</th>${underOverHeader}</tr></thead>
+      <tbody>${rows || `<tr><td colspan=${triageMode?5:3}>ยังไม่มีผู้เริ่มทำ</td></tr>`}</tbody></table>
     </div>
     <div class="small-muted" style="text-align:left;">อัปเดตสดแบบเรียลไทม์ ไม่ต้องรอให้ทุกคนทำครบ</div>
   `;
@@ -596,6 +628,7 @@ async function renderLiveLeaderboard(phase){
 async function renderCompare(){
   const wrap = document.getElementById('resultsContent');
   const preIds = currentClassroom.pretestQuestionIds, postIds = currentClassroom.posttestQuestionIds;
+  const triageMode = currentClassroom.triageMode !== false;
   await ensureQuestionsCached(preIds, currentClassroom.pretestTopicId);
   await ensureQuestionsCached(postIds, currentClassroom.posttestTopicId);
 
@@ -610,18 +643,31 @@ async function renderCompare(){
   const avgPre = n ? combined.reduce((s,r)=>s+r.pre,0)/n : 0;
   const avgPost = n ? combined.reduce((s,r)=>s+r.post,0)/n : 0;
   const avgDelta = n ? combined.reduce((s,r)=>s+(r.post-r.pre),0)/n : 0;
-  const preAgg = aggregateTriage(currentStudents,'pretest',preIds);
-  const postAgg = aggregateTriage(currentStudents,'posttest',postIds);
-  const preUnderPct = preAgg.answered ? Math.round((preAgg.under/preAgg.answered)*100) : 0;
-  const postUnderPct = postAgg.answered ? Math.round((postAgg.under/postAgg.answered)*100) : 0;
-  const preOverPct = preAgg.answered ? Math.round((preAgg.over/preAgg.answered)*100) : 0;
-  const postOverPct = postAgg.answered ? Math.round((postAgg.over/postAgg.answered)*100) : 0;
-  const underChange = postUnderPct - preUnderPct;
+
+  let triageStatsHtml = '', triageNoteHtml = '', underOverHeader = '';
+  if(triageMode){
+    const preAgg = aggregateTriage(currentStudents,'pretest',preIds);
+    const postAgg = aggregateTriage(currentStudents,'posttest',postIds);
+    const preUnderPct = preAgg.answered ? Math.round((preAgg.under/preAgg.answered)*100) : 0;
+    const postUnderPct = postAgg.answered ? Math.round((postAgg.under/postAgg.answered)*100) : 0;
+    const preOverPct = preAgg.answered ? Math.round((preAgg.over/preAgg.answered)*100) : 0;
+    const postOverPct = postAgg.answered ? Math.round((postAgg.over/postAgg.answered)*100) : 0;
+    const underChange = postUnderPct - preUnderPct;
+    triageStatsHtml = `
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" style="color:var(--l1);">${preUnderPct}% → ${postUnderPct}%</div><div class="lab">Undertriage</div></div>
+        <div class="stat-box"><div class="num" style="color:var(--l5);">${preOverPct}% → ${postOverPct}%</div><div class="lab">Overtriage</div></div>
+      </div>
+    `;
+    triageNoteHtml = `<div class="small-muted">${underChange<0 ? `Undertriage ลดลง ${Math.abs(underChange)} จุด — สัญญาณที่ดี` : (underChange>0 ? `Undertriage เพิ่มขึ้น ${underChange} จุด` : 'Undertriage ไม่เปลี่ยนแปลง')}</div>`;
+    underOverHeader = `<th>Under</th><th>Over</th>`;
+  }
 
   const rows = combined.map(c=>{
     const d = c.post-c.pre; const cls = d>0?'delta-up':(d<0?'delta-down':'delta-flat'); const lbl = d>0?`+${d}`:`${d}`;
+    const underOverCols = triageMode ? `<td>${c.preUnder}→${c.postUnder}</td><td>${c.preOver}→${c.postOver}</td>` : '';
     return `<tr><td>${c.name}</td><td>${c.pre}/${preIds.length} (${c.preAns} ตอบ)</td><td>${c.post}/${postIds.length} (${c.postAns} ตอบ)</td><td class="${cls}">${lbl}</td>
-      <td>${c.preUnder}→${c.postUnder}</td><td>${c.preOver}→${c.postOver}</td></tr>`;
+      ${underOverCols}</tr>`;
   }).join('');
 
   wrap.innerHTML = `
@@ -633,14 +679,11 @@ async function renderCompare(){
       <span style="font-size:20px; font-weight:700; color:var(--teal-deep);">${avgDelta>=0?'+':''}${avgDelta.toFixed(1)}</span><br>
       <span style="font-size:13px;">คะแนนเฉลี่ยที่เปลี่ยนไปต่อคน</span>
     </div>
-    <div class="stat-grid">
-      <div class="stat-box"><div class="num" style="color:var(--l1);">${preUnderPct}% → ${postUnderPct}%</div><div class="lab">Undertriage</div></div>
-      <div class="stat-box"><div class="num" style="color:var(--l5);">${preOverPct}% → ${postOverPct}%</div><div class="lab">Overtriage</div></div>
-    </div>
-    <div class="small-muted">${underChange<0 ? `Undertriage ลดลง ${Math.abs(underChange)} จุด — สัญญาณที่ดี` : (underChange>0 ? `Undertriage เพิ่มขึ้น ${underChange} จุด` : 'Undertriage ไม่เปลี่ยนแปลง')}</div>
+    ${triageStatsHtml}
+    ${triageNoteHtml}
     <div style="max-height:320px; overflow-y:auto; margin-top:12px;">
-      <table><thead><tr><th>ชื่อ</th><th>Pre</th><th>Post</th><th>Δ</th><th>Under</th><th>Over</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan=6>ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
+      <table><thead><tr><th>ชื่อ</th><th>Pre</th><th>Post</th><th>Δ</th>${underOverHeader}</tr></thead>
+      <tbody>${rows || `<tr><td colspan=${triageMode?6:4}>ยังไม่มีข้อมูล</td></tr>`}</tbody></table>
     </div>
   `;
 }
@@ -755,12 +798,13 @@ async function renderRoom(){
 
 async function exportCsv(){
   const preIds = currentClassroom.pretestQuestionIds, postIds = currentClassroom.posttestQuestionIds;
+  const triageMode = currentClassroom.triageMode !== false;
   await ensureQuestionsCached(preIds, currentClassroom.pretestTopicId);
   await ensureQuestionsCached(postIds, currentClassroom.posttestTopicId);
 
   const header = ['Name','Department',
-    'Pretest_Score','Pretest_Total','Pretest_Under','Pretest_UnderMagnitude','Pretest_Over','Pretest_OverMagnitude',
-    'Posttest_Score','Posttest_Total','Posttest_Under','Posttest_UnderMagnitude','Posttest_Over','Posttest_OverMagnitude',
+    'Pretest_Score','Pretest_Total', ...(triageMode ? ['Pretest_Under','Pretest_UnderMagnitude','Pretest_Over','Pretest_OverMagnitude'] : []),
+    'Posttest_Score','Posttest_Total', ...(triageMode ? ['Posttest_Under','Posttest_UnderMagnitude','Posttest_Over','Posttest_OverMagnitude'] : []),
     'Delta']
     .concat(preIds.map((_,i)=>'Pretest_Q'+(i+1)))
     .concat(postIds.map((_,i)=>'Posttest_Q'+(i+1)));
@@ -778,8 +822,8 @@ async function exportCsv(){
     });
     rows.push([
       s.name, s.dept||'',
-      preB.correct, preIds.length, preB.under, preB.underMag, preB.over, preB.overMag,
-      postB.correct, postIds.length, postB.under, postB.underMag, postB.over, postB.overMag,
+      preB.correct, preIds.length, ...(triageMode ? [preB.under, preB.underMag, preB.over, preB.overMag] : []),
+      postB.correct, postIds.length, ...(triageMode ? [postB.under, postB.underMag, postB.over, postB.overMag] : []),
       postB.correct-preB.correct,
       ...preAns, ...postAns
     ]);
