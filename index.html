@@ -86,7 +86,7 @@
     <div class="brand">
       <div class="dot-logo"></div>
       <div>
-        <span class="mark">PARTICIPANTS</span>
+        <span class="mark">ER TRIAGE</span>
         <h1 id="titleText">เข้าร่วมการบรรยาย</h1>
       </div>
     </div>
@@ -121,6 +121,7 @@ const db = getFirestore(fbApp);
 
 const OPTIONS_DEFAULT = ["Level 1 (แดง)","Level 2 (ส้ม)","Level 3 (เหลือง)","Level 4 (เขียว)","Level 5 (ขาว)"];
 const LEVEL_COLORS = ["var(--l1)","var(--l2)","var(--l3)","var(--l4)","var(--l5)"];
+const REGISTRY_UNUSED = null;
 
 const root = document.getElementById('root');
 const titleText = document.getElementById('titleText');
@@ -130,12 +131,19 @@ let uid = null;
 let classroomId = null;
 let className = '';
 let myName = '';
-let classroom = null; // live snapshot data
+let classroom = null;
 let unsubRoom = null;
 let questionCache = {};
-let answeredSet = new Set();
+
+let showingMySummary = false;
+let myAnswers = { pretestAnswers:{}, posttestAnswers:{} };
+let preIdx = 0, postIdx = 0;
+let preSubmitted = false, postSubmitted = false;
 
 function swatch(i){ return `<span class="swatch" style="background:${LEVEL_COLORS[i]}"></span>`; }
+function genId(){ return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+function ctrlKeyUnused(){}
 
 setPersistence(auth, inMemoryPersistence).then(()=>{
   onAuthStateChanged(auth, (user)=>{
@@ -214,12 +222,7 @@ async function doJoin(){
   });
 }
 
-// ---------- PARTICIPANT VIEW (presenter drives which question is active) ----------
-let showingMySummary = false;
-let myAnswers = { pretestAnswers:{}, posttestAnswers:{} };
-let postIdx = 0;
-let posttestSubmitted = false;
-
+// ---------- PARTICIPANT VIEW ----------
 function bottomLink(){
   return `<button class="linkbtn" id="mySummaryLink">${showingMySummary ? '← กลับไปหน้าคำถาม' : 'ดูสรุปคะแนนของฉัน (Pre vs Post)'}</button>`;
 }
@@ -254,12 +257,92 @@ async function renderParticipant(){
     return;
   }
   if(mode === 'pretest'){
-    return renderActiveQuestion('pretest');
+    return renderTest('pretest');
   }
   if(mode === 'posttest'){
-    return renderPosttest();
+    return renderTest('posttest');
   }
   root.innerHTML = `<div class="card"><div class="status-box">รอสักครู่...</div></div>`;
+}
+
+async function renderTest(phase){
+  const ids = phase==='pretest' ? classroom.pretestQuestionIds : classroom.posttestQuestionIds;
+  const topicId = phase==='pretest' ? classroom.pretestTopicId : classroom.posttestTopicId;
+  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const submitted = phase==='pretest' ? preSubmitted : postSubmitted;
+
+  if(submitted){
+    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">ส่งคำตอบเรียบร้อยแล้ว</div>รอผลจากผู้บรรยาย</div></div>` + bottomLink();
+    bindBottomLink();
+    return;
+  }
+
+  let idx = phase==='pretest' ? preIdx : postIdx;
+  if(idx >= ids.length) idx = ids.length - 1;
+  idx = Math.max(0, idx);
+  const qid = ids[idx];
+  const answeredCount = Object.keys(myAnswers[field]).length;
+  const isLast = idx === ids.length - 1;
+
+  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
+  const q = await getQuestion(topicId, qid);
+  const opts = q.options || OPTIONS_DEFAULT;
+  const currentAnswer = myAnswers[field][qid];
+
+  root.innerHTML = `
+    <div class="card">
+      <div class="qtag">${phase === 'pretest' ? 'PRETEST' : 'POST-TEST'} · ข้อ ${idx+1}/${ids.length} · ตอบแล้ว ${answeredCount}/${ids.length}</div>
+      <div class="case-box">${q.case}</div>
+      <div id="optWrap"></div>
+      <div class="nav-row">
+        <button class="ghost" id="prevBtn" style="flex:1;" ${idx===0?'disabled':''}>ย้อนกลับ</button>
+        ${isLast
+          ? `<button class="primary" id="submitBtn" style="flex:1;">ส่งคำตอบ (Submit)</button>`
+          : `<button class="primary" id="nextBtn" style="flex:1;">ข้อถัดไป</button>`}
+      </div>
+      ${!isLast ? `<button class="linkbtn" id="earlySubmitBtn">ส่งคำตอบตอนนี้เลย (ยังไม่ต้องรอทำครบ)</button>` : ''}
+    </div>
+  ` + bottomLink();
+
+  const wrap = document.getElementById('optWrap');
+  opts.forEach((opt, oIdx)=>{
+    const div = document.createElement('div');
+    div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
+    div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
+    div.addEventListener('click', ()=>{
+      myAnswers[field][qid] = oIdx;
+      renderTest(phase);
+    });
+    wrap.appendChild(div);
+  });
+
+  document.getElementById('prevBtn').addEventListener('click', ()=>{
+    if(phase==='pretest') preIdx = Math.max(0, idx-1); else postIdx = Math.max(0, idx-1);
+    renderTest(phase);
+  });
+  if(isLast){
+    document.getElementById('submitBtn').addEventListener('click', ()=>submitTest(phase));
+  } else {
+    document.getElementById('nextBtn').addEventListener('click', ()=>{
+      if(phase==='pretest') preIdx = Math.min(ids.length-1, idx+1); else postIdx = Math.min(ids.length-1, idx+1);
+      renderTest(phase);
+    });
+    document.getElementById('earlySubmitBtn').addEventListener('click', ()=>submitTest(phase));
+  }
+  bindBottomLink();
+}
+
+async function submitTest(phase){
+  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const stampField = phase==='pretest' ? 'pretestSubmittedAt' : 'posttestSubmittedAt';
+  try{
+    await updateDoc(doc(db,'classrooms',classroomId,'students',uid), {
+      [field]: myAnswers[field],
+      [stampField]: new Date().toISOString()
+    });
+  }catch(e){}
+  if(phase==='pretest') preSubmitted = true; else postSubmitted = true;
+  renderTest(phase);
 }
 
 async function renderEndedScreen(){
@@ -322,118 +405,6 @@ async function renderEndedScreen(){
   `;
 }
 
-async function renderActiveQuestion(phase){
-  const ids = phase==='pretest' ? classroom.pretestQuestionIds : classroom.posttestQuestionIds;
-  const topicId = phase==='pretest' ? classroom.pretestTopicId : classroom.posttestTopicId;
-  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
-  const qid = classroom.activeQid;
-
-  if(!qid || !ids.includes(qid)){
-    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">รอผู้บรรยาย</div>กำลังจะส่งคำถามข้อถัดไปให้เร็วๆ นี้</div></div>` + bottomLink();
-    bindBottomLink();
-    return;
-  }
-
-  const answeredCount = Object.keys(myAnswers[field]).length;
-  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
-  const q = await getQuestion(topicId, qid);
-  const opts = q.options || OPTIONS_DEFAULT;
-  const currentAnswer = myAnswers[field][qid];
-
-  root.innerHTML = `
-    <div class="card">
-      <div class="qtag">${phase === 'pretest' ? 'PRETEST' : 'POST-TEST'} · ตอบไปแล้ว ${answeredCount}/${ids.length} ข้อ</div>
-      <div class="case-box">${q.case}</div>
-      <div id="optWrap"></div>
-    </div>
-  ` + bottomLink();
-
-  const wrap = document.getElementById('optWrap');
-  opts.forEach((opt, oIdx)=>{
-    const div = document.createElement('div');
-    div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
-    div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
-    div.addEventListener('click', async ()=>{
-      myAnswers[field][qid] = oIdx;
-      try{
-        await updateDoc(doc(db,'classrooms',classroomId,'students',uid), { [`${field}.${qid}`]: oIdx });
-      }catch(e){}
-      renderActiveQuestion(phase);
-    });
-    wrap.appendChild(div);
-  });
-  bindBottomLink();
-}
-
-async function renderPosttest(){
-  const ids = classroom.posttestQuestionIds;
-  const topicId = classroom.posttestTopicId;
-
-  if(posttestSubmitted){
-    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">ส่งคำตอบเรียบร้อยแล้ว</div>รอผลจากผู้บรรยาย</div></div>` + bottomLink();
-    bindBottomLink();
-    return;
-  }
-
-  if(postIdx >= ids.length) postIdx = ids.length - 1;
-  const idx = Math.max(0, postIdx);
-  const qid = ids[idx];
-  const answeredCount = Object.keys(myAnswers.posttestAnswers).length;
-  const isLast = idx === ids.length - 1;
-
-  root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
-  const q = await getQuestion(topicId, qid);
-  const opts = q.options || OPTIONS_DEFAULT;
-  const currentAnswer = myAnswers.posttestAnswers[qid];
-
-  root.innerHTML = `
-    <div class="card">
-      <div class="qtag">POST-TEST · ข้อ ${idx+1}/${ids.length} · ตอบแล้ว ${answeredCount}/${ids.length}</div>
-      <div class="case-box">${q.case}</div>
-      <div id="optWrap"></div>
-      <div class="nav-row">
-        <button class="ghost" id="prevBtn" style="flex:1;" ${idx===0?'disabled':''}>ย้อนกลับ</button>
-        ${isLast
-          ? `<button class="primary" id="submitBtn" style="flex:1;">ส่งคำตอบ (Submit)</button>`
-          : `<button class="primary" id="nextBtn" style="flex:1;">ข้อถัดไป</button>`}
-      </div>
-      ${!isLast ? `<button class="linkbtn" id="earlySubmitBtn">ส่งคำตอบตอนนี้เลย (ยังไม่ต้องรอทำครบ)</button>` : ''}
-    </div>
-  ` + bottomLink();
-
-  const wrap = document.getElementById('optWrap');
-  opts.forEach((opt, oIdx)=>{
-    const div = document.createElement('div');
-    div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
-    div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
-    div.addEventListener('click', ()=>{
-      myAnswers.posttestAnswers[qid] = oIdx;
-      renderPosttest();
-    });
-    wrap.appendChild(div);
-  });
-
-  document.getElementById('prevBtn').addEventListener('click', ()=>{ postIdx = Math.max(0, idx-1); renderPosttest(); });
-  if(isLast){
-    document.getElementById('submitBtn').addEventListener('click', submitPosttest);
-  } else {
-    document.getElementById('nextBtn').addEventListener('click', ()=>{ postIdx = Math.min(ids.length-1, idx+1); renderPosttest(); });
-    document.getElementById('earlySubmitBtn').addEventListener('click', submitPosttest);
-  }
-  bindBottomLink();
-}
-
-async function submitPosttest(){
-  try{
-    await updateDoc(doc(db,'classrooms',classroomId,'students',uid), {
-      posttestAnswers: myAnswers.posttestAnswers,
-      posttestSubmittedAt: new Date().toISOString()
-    });
-  }catch(e){}
-  posttestSubmitted = true;
-  renderPosttest();
-}
-
 async function renderMySummary(){
   root.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคะแนนของคุณ...</div></div>`;
 
@@ -454,7 +425,6 @@ async function renderMySummary(){
   }
   const preB = breakdown(myAnswers.pretestAnswers, preIds);
   const postB = breakdown(myAnswers.posttestAnswers, postIds);
-
   const delta = postB.correct - preB.correct;
   const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-flat');
   const deltaLabel = delta > 0 ? `+${delta}` : `${delta}`;

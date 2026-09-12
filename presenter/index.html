@@ -83,10 +83,6 @@
   .status-box{text-align:center; padding:34px 14px; color:#6B7674; font-size:15px;}
   .status-box .big{font-size:18px; color:var(--teal-deep); font-weight:700; margin-bottom:8px;}
   .qtag{font-size:12px; font-weight:700; color:var(--teal); margin-bottom:6px; letter-spacing:.02em;}
-  .bar-row{margin-bottom:12px;}
-  .bar-label{font-size:13.5px; display:flex; justify-content:space-between; margin-bottom:6px;}
-  .bar-track{height:10px; background:var(--paper); border-radius:6px; overflow:hidden;}
-  .bar-fill{height:100%; border-radius:6px; transition:width .3s ease;}
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px;}
   .stat-box{background:var(--paper); border-radius:var(--radius-md); padding:16px 12px; text-align:center;}
   .stat-box .num{font-size:25px; font-weight:700; color:var(--teal-deep); line-height:1.2;}
@@ -124,7 +120,7 @@
     <div class="brand">
       <div class="dot-logo"></div>
       <div>
-        <span class="mark">PRESENTER</span>
+        <span class="mark">ER TRIAGE · PRESENTER</span>
         <h1 id="titleText">แผงควบคุมผู้บรรยาย</h1>
       </div>
     </div>
@@ -140,7 +136,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  collection, query, where, getDocs, onSnapshot, writeBatch, serverTimestamp, orderBy, arrayUnion
+  collection, query, where, getDocs, onSnapshot, writeBatch, serverTimestamp, orderBy
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -167,12 +163,13 @@ const statusBadge = document.getElementById('statusBadge');
 let uid = null;
 let view = 'classrooms'; // classrooms | bank | classroom-new | classroom-control
 let unsubRoom = null, unsubStudents = null;
-let currentClassroom = null; // {id, ...data}
-let currentStudents = []; // [{id, ...}]
-let questionCache = {}; // qid -> {case, options, correct, topicId}
-let bankTopics = []; // {id, name}
+let currentClassroom = null;
+let currentStudents = [];
+let questionCache = {};
+let bankTopics = [];
 let selectedTopicId = null;
-let csvPreview = null; // {valid:[], invalid:[]}
+let csvPreview = null;
+let resultsTab = 'pretest'; // 'pretest' | 'posttest' | 'compare'
 
 let presenterAuthed = false;
 const PRESENTER_PASSCODE = "triage2026"; // TODO: เปลี่ยนรหัสผ่านตรงนี้เป็นของคุณเอง
@@ -189,11 +186,7 @@ function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=
 // ---------- AUTH ----------
 setPersistence(auth, inMemoryPersistence).then(()=>{
   onAuthStateChanged(auth, (user)=>{
-    if(user){
-      uid = user.uid;
-      statusBadge.textContent = 'PRESENTER';
-      render();
-    }
+    if(user){ uid = user.uid; statusBadge.textContent = presenterAuthed ? 'PRESENTER' : 'ล็อกอยู่'; render(); }
   });
   signInAnonymously(auth).catch(err=>{
     statusBadge.textContent = 'เชื่อมต่อไม่สำเร็จ';
@@ -201,32 +194,26 @@ setPersistence(auth, inMemoryPersistence).then(()=>{
   });
 });
 
-// ---------- PRESENTER PASSCODE GATE ----------
+// ---------- PRESENTER GATE ----------
 function renderGate(){
   titleText.textContent = "เข้าสู่ระบบผู้บรรยาย";
   statusBadge.textContent = 'ล็อกอยู่';
   root.innerHTML = `
     <div class="card">
-      <p class="lead">กรุณาใส่รหัสผ่านสำหรับผู้บรรยายเพื่อเข้าใช้งานแผงควบคุม</p>
-      <input type="password" id="passInput" placeholder="รหัสผ่าน" style="letter-spacing:2px;">
-      <div id="passErr" style="display:none; color:var(--l1); font-size:13px; margin:-8px 0 12px;">รหัสผ่านไม่ถูกต้อง</div>
+      <p class="lead">กรุณาใส่รหัสผ่านผู้บรรยายเพื่อเข้าใช้งานแผงควบคุม</p>
+      <input type="password" id="passInput" placeholder="รหัสผ่าน" autofocus>
+      <div class="errtag" id="passErr" style="display:none; margin:-8px 0 12px;">รหัสผ่านไม่ถูกต้อง</div>
       <button class="primary" id="passBtn">เข้าสู่ระบบ</button>
     </div>
   `;
-  const input = document.getElementById('passInput');
-  document.getElementById('passBtn').addEventListener('click', tryUnlock);
-  input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryUnlock(); });
-  input.focus();
-  function tryUnlock(){
-    if(input.value === PRESENTER_PASSCODE){
-      presenterAuthed = true;
-      statusBadge.textContent = 'PRESENTER';
-      view = 'classrooms';
-      render();
-    } else {
-      document.getElementById('passErr').style.display = 'block';
-    }
-  }
+  const passInput = document.getElementById('passInput');
+  const tryLogin = ()=>{
+    if(passInput.value === PRESENTER_PASSCODE){
+      presenterAuthed = true; statusBadge.textContent = 'PRESENTER'; view='classrooms'; render();
+    } else { document.getElementById('passErr').style.display = 'block'; }
+  };
+  document.getElementById('passBtn').addEventListener('click', tryLogin);
+  passInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryLogin(); });
 }
 
 // ---------- NAV ----------
@@ -255,6 +242,9 @@ async function getQuestion(topicId, qid){
   }catch(e){}
   return { case:'(ไม่พบคำถาม)', options: OPTIONS_DEFAULT, correct:0 };
 }
+async function ensureQuestionsCached(ids, topicId){
+  for(const qid of ids){ if(!questionCache[qid]) await getQuestion(topicId, qid); }
+}
 
 // ============ CLASSROOMS LIST ============
 async function renderClassroomsList(){
@@ -270,10 +260,7 @@ async function renderClassroomsList(){
 
   let roomsHtml = rooms.length ? rooms.map(r=>`
     <div class="roomrow">
-      <div>
-        <div class="rname">${r.name}</div>
-        <div class="rmeta">รหัส ${r.code}</div>
-      </div>
+      <div><div class="rname">${r.name}</div><div class="rmeta">รหัส ${r.code}</div></div>
       <button class="ghost small" data-id="${r.id}">เข้าควบคุม</button>
     </div>
   `).join('') : `<div class="small-muted">ยังไม่เคยสร้าง Classroom</div>`;
@@ -316,7 +303,7 @@ async function renderClassroomNew(){
       <input type="text" id="roomName" placeholder="เช่น Batch 12 - เช้า">
     </div>
     <div class="card">
-      <label>1. เลือกหัวข้อสำหรับ Pretest</label>
+      <label>1. เลือกหัวข้อสำหรับ Pretest (เลือกข้อเอง)</label>
       <div id="preTopicPills">${topics.map(t=>`<span class="topicpill" data-id="${t.id}">${t.name}</span>`).join('')}</div>
       <div id="preQuestionList" style="margin-top:10px;"></div>
     </div>
@@ -333,7 +320,7 @@ async function renderClassroomNew(){
         <input type="checkbox" id="triageModeCheck" checked>
         <div>
           <strong style="font-size:13.5px;">เปิดการวิเคราะห์ Undertriage / Overtriage</strong>
-          <div style="font-size:12.5px; color:#6B7674; margin-top:2px;">เหมาะกับคำถามที่เป็นการจัดระดับความรุนแรง 5 ระดับ (เช่น Triage) ถ้าปิดไว้ ระบบจะคิดคะแนนแบบถูก/ผิดปกติเท่านั้น เหมาะกับหัวข้ออื่นที่ไม่ใช่การจัดระดับความรุนแรง</div>
+          <div style="font-size:12.5px; color:#6B7674; margin-top:2px;">เหมาะกับคำถามที่เป็นการจัดระดับความรุนแรงแบบเรียงลำดับ (เช่น ESI/MOPH Triage หรือ START/SALT ใน MCI) ถ้าปิดไว้ ระบบจะคิดคะแนนแบบถูก/ผิดปกติเท่านั้น</div>
         </div>
       </div>
     </div>
@@ -430,7 +417,7 @@ async function createClassroom(){
   const data = {
     name: newRoomState.name.trim(),
     code, presenterUid: uid, createdAt: serverTimestamp(),
-    mode:'lobby', activeQid:null, pretestSentIds:[], posttestSentIds:[],
+    mode:'lobby',
     triageMode: newRoomState.triageMode,
     pretestTopicId: newRoomState.pretestTopicId,
     pretestQuestionIds: newRoomState.pretestSelected,
@@ -487,32 +474,23 @@ async function updateRoom(fields){
 function triageBreakdown(s, phase, ids){
   const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
   const ans = s[field] || {};
-  let correct=0, under=0, over=0, underMag=0, overMag=0, answered=0;
+  let correct=0, answered=0, under=0, over=0, underMag=0, overMag=0;
   ids.forEach(qid=>{
     const q = questionCache[qid];
     if(!q || ans[qid]===undefined) return;
     answered++;
-    const delta = ans[qid] - q.correct;
-    if(delta===0) correct++;
-    else if(delta>0){ under++; underMag+=delta; }
-    else { over++; overMag+=Math.abs(delta); }
+    const d = ans[qid] - q.correct;
+    if(d===0) correct++;
+    else if(d>0){ under++; underMag+=d; }
+    else { over++; overMag+=Math.abs(d); }
   });
   return { correct, under, over, underMag, overMag, answered };
 }
 function aggregateTriage(students, phase, ids){
-  let correct=0, under=0, over=0, answered=0;
-  students.forEach(s=>{
-    const b = triageBreakdown(s, phase, ids);
-    correct+=b.correct; under+=b.under; over+=b.over; answered+=b.answered;
-  });
-  return { correct, under, over, answered };
+  let under=0, over=0, answered=0;
+  students.forEach(s=>{ const b = triageBreakdown(s, phase, ids); under+=b.under; over+=b.over; answered+=b.answered; });
+  return { under, over, answered };
 }
-
-async function ensureQuestionsCached(ids, topicId){
-  for(const qid of ids){ if(!questionCache[qid]) await getQuestion(topicId, qid); }
-}
-
-let resultsTab = 'pretest'; // 'pretest' | 'posttest' | 'compare'
 
 function modeControlHtml(){
   const mode = currentClassroom.mode || 'lobby';
@@ -535,7 +513,8 @@ function modeControlHtml(){
 }
 function bindModeControl(){
   ['lecture','pretest','posttest'].forEach(key=>{
-    document.getElementById('mode_'+key).addEventListener('click', ()=> updateRoom({ mode:key }));
+    const el = document.getElementById('mode_'+key);
+    if(el) el.addEventListener('click', ()=> updateRoom({ mode:key }));
   });
   const endBtn = document.getElementById('mode_ended');
   if(endBtn){
@@ -582,9 +561,7 @@ async function renderLiveLeaderboard(phase){
   const started = results.filter(r=>r.answered>0).length;
   const avgAmongStarted = started ? results.filter(r=>r.answered>0).reduce((s,r)=>s+r.correct,0)/started : 0;
 
-  let triageStatsHtml = '';
-  let underOverCols = '';
-  let underOverHeader = '';
+  let triageStatsHtml = '', underOverHeader = '';
   if(triageMode){
     const agg = aggregateTriage(currentStudents, phase, ids);
     const underPct = agg.answered ? Math.round((agg.under/agg.answered)*100) : 0;
@@ -599,17 +576,16 @@ async function renderLiveLeaderboard(phase){
   }
 
   const rows = results.map((r,i)=>{
-    underOverCols = triageMode
+    const underOverCols = triageMode
       ? `<td style="color:var(--l1); font-weight:600;">${r.under}</td><td style="color:var(--l5); font-weight:600;">${r.over}</td>`
       : '';
-    return `
-    <tr>
+    return `<tr>
       <td>${i===0 && r.answered>0 ? '🥇 ' : ''}${r.name}${r.dept?' · '+r.dept:''}</td>
       <td>${r.correct}/${ids.length}</td>
       <td style="color:#6B7674;">${r.answered}/${ids.length}</td>
       ${underOverCols}
-    </tr>
-  `;}).join('');
+    </tr>`;
+  }).join('');
 
   wrap.innerHTML = `
     <div class="stat-grid" style="margin-top:12px;">
@@ -693,86 +669,26 @@ async function renderResultsContent(){
   else await renderLiveLeaderboard(resultsTab);
 }
 
-function tallyForQuestion(phase, qid){
-  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
-  const counts = new Array(5).fill(0); let total=0;
-  currentStudents.forEach(s=>{
-    const ans = s[field]; if(ans && ans[qid]!==undefined){ counts[ans[qid]]++; total++; }
-  });
-  return { counts, total };
-}
-
-async function renderQuestionPicker(mode){
-  const ids = mode==='pretest' ? currentClassroom.pretestQuestionIds : currentClassroom.posttestQuestionIds;
-  const topicId = mode==='pretest' ? currentClassroom.pretestTopicId : currentClassroom.posttestTopicId;
-  await ensureQuestionsCached(ids, topicId);
-  const sentIds = currentClassroom[mode+'SentIds'] || [];
-  const activeQid = currentClassroom.activeQid;
-
-  const gridHtml = ids.map((qid,i)=>{
-    const q = questionCache[qid];
-    const isActive = qid === activeQid;
-    const isSent = sentIds.includes(qid) && !isActive;
-    const preview = q ? q.case.slice(0,34) + (q.case.length>34?'…':'') : '';
-    return `
-      <div class="qcheckrow ${isActive?'checked':''}" data-qid="${qid}" style="cursor:pointer; ${isSent && !isActive ? 'opacity:.6;' : ''}">
-        <div style="flex:1;">
-          <strong style="font-size:13px;">ข้อ ${i+1}</strong> ${isActive ? '<span class="oktag">กำลังส่งอยู่</span>' : (isSent ? '<span class="small-muted" style="margin:0;">ส่งไปแล้ว</span>' : '')}
-          <div style="font-size:12.5px; color:#6B7674; margin-top:2px;">${preview}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  let activeCardHtml = '';
-  if(activeQid && ids.includes(activeQid)){
-    const q = questionCache[activeQid];
-    const opts = q.options || OPTIONS_DEFAULT;
-    const { counts, total } = tallyForQuestion(mode, activeQid);
-    activeCardHtml = `
-      <div class="card">
-        <div class="qtag">กำลังส่งอยู่ตอนนี้</div>
-        <div class="case-box">${q.case}</div>
-        <div style="font-size:13px; color:#6B7674; margin-bottom:10px;">เฉลย: ${swatch(q.correct)} ${opts[q.correct]}</div>
-        ${opts.map((opt,i)=>{
-          const pct = total ? Math.round((counts[i]/total)*100) : 0;
-          return `<div class="bar-row"><div class="bar-label"><span>${swatch(i)} ${opt}</span><span>${counts[i]} คน</span></div>
-            <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${LEVEL_COLORS[i]}"></div></div></div>`;
-        }).join('')}
-        <div class="small-muted">ตอบแล้ว ${total} คน · เข้าร่วมทั้งหมด ${currentStudents.length} คน (อัปเดตสด)</div>
-      </div>
-    `;
-  } else {
-    activeCardHtml = `<div class="card"><div class="small-muted">ยังไม่ได้ส่งคำถามข้อใดในชุดนี้ — เลือกข้อด้านล่างเพื่อส่งให้ผู้ฟัง</div></div>`;
-  }
-
-  const wrap = document.getElementById('questionPickerWrap');
-  wrap.innerHTML = activeCardHtml + `
-    <div class="card">
-      <label style="margin-bottom:8px;">เลือกข้อที่จะส่ง (เลือกข้อไหนก่อนหลังก็ได้)</label>
-      ${gridHtml}
-    </div>
-  `;
-  wrap.querySelectorAll('[data-qid]').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      const qid = row.dataset.qid;
-      updateRoom({ activeQid: qid, [mode+'SentIds']: arrayUnion(qid) });
-    });
-  });
-}
-
 async function renderRoom(){
   if(!currentClassroom) return;
   const mode = currentClassroom.mode || 'lobby';
 
   let modeStatusHtml = '';
-  let needsPicker = false;
   if(mode === 'lobby'){
     modeStatusHtml = `<div class="card"><p class="lead">แชร์รหัส Classroom ด้านบนให้ผู้ฟังกรอกในหน้าจอผู้เข้าร่วม (${currentStudents.length} คนเข้าร่วมแล้ว) จากนั้นเลือกโหมดด้านล่างเพื่อเริ่ม</p></div>`;
   } else if(mode === 'lecture'){
     modeStatusHtml = `<div class="card"><p class="lead">ผู้ฟังเห็นข้อความ "กำลังบรรยาย" อยู่ ดำเนินการบรรยายได้ตามปกติ เมื่อพร้อมกดเปลี่ยนโหมดด้านล่างได้ทันที</p></div>`;
   } else if(mode === 'pretest'){
-    needsPicker = true;
+    const total = currentClassroom.pretestQuestionIds.length;
+    const submittedCount = currentStudents.filter(s => !!s.pretestSubmittedAt).length;
+    modeStatusHtml = `
+      <div class="card">
+        <p class="lead">ผู้ฟังได้รับคำถาม Pretest ทั้งชุด (${total} ข้อ) พร้อมกัน ทำตามจังหวะตัวเองแล้วกด "ส่งคำตอบ" ตอนจบ — คะแนนจะขึ้นในแท็บด้านล่างทันทีที่มีคนส่ง</p>
+        <div class="stat-grid" style="margin-top:4px;">
+          <div class="stat-box"><div class="num">${submittedCount}/${currentStudents.length}</div><div class="lab">ส่งคำตอบแล้ว</div></div>
+        </div>
+      </div>
+    `;
   } else if(mode === 'posttest'){
     const total = currentClassroom.posttestQuestionIds.length;
     const submittedCount = currentStudents.filter(s => !!s.posttestSubmittedAt).length;
@@ -788,11 +704,8 @@ async function renderRoom(){
     modeStatusHtml = `<div class="card"><p class="lead">จบการนำเสนอแล้ว ผู้ฟังทุกคนเห็นหน้าขอบคุณพร้อมคะแนนสรุปของตัวเองแล้ว — ยังดูผลรวมและ Export CSV ต่อได้ตามปกติด้านล่าง</p></div>`;
   }
 
-  root.innerHTML = navBar() + classBarHtml() + modeControlHtml() + modeStatusHtml
-    + (needsPicker ? `<div id="questionPickerWrap"><div class="card"><div class="status-box">กำลังโหลด...</div></div></div>` : '')
-    + resultsTabsHtml();
+  root.innerHTML = navBar() + classBarHtml() + modeControlHtml() + modeStatusHtml + resultsTabsHtml();
   bindNav(); bindClassBar(); bindModeControl(); bindResultsTabs();
-  if(needsPicker) await renderQuestionPicker(mode);
   await renderResultsContent();
 }
 
