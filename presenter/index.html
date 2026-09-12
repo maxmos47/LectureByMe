@@ -541,7 +541,13 @@ function resultsTabsHtml(){
 }
 function bindResultsTabs(){
   ['pretest','posttest','compare'].forEach(key=>{
-    document.getElementById('tab_'+key).addEventListener('click', ()=>{ resultsTab = key; renderResultsContent(); });
+    document.getElementById('tab_'+key).addEventListener('click', ()=>{
+      resultsTab = key;
+      ['pretest','posttest','compare'].forEach(k=>{
+        document.getElementById('tab_'+k).classList.toggle('active', k===key);
+      });
+      renderResultsContent();
+    });
   });
 }
 
