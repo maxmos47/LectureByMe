@@ -151,7 +151,9 @@ const firebaseConfig = {
   measurementId: "G-BEW4ZE5WSR"
 };
 
-const fbApp = initializeApp(firebaseConfig);
+// ตั้งชื่อ app instance แยกจากหน้าอื่น (presenter/participant/dashboard) เพื่อไม่ให้ Firebase Auth
+// แชร์ session เดียวกันข้ามแท็บ (ป้องกัน anonymous login ของ dashboard ไปทับ session ผู้บรรยาย)
+const fbApp = initializeApp(firebaseConfig, "presenter");
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
@@ -585,6 +587,10 @@ async function updateRoom(fields){
 // chosen < correct  => picked a MORE urgent level than needed => OVER-triage (wastes resources)
 function triageBreakdown(s, phase, ids){
   const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const submittedField = phase==='pretest' ? 'pretestSubmittedAt' : 'posttestSubmittedAt';
+  // สำคัญ: คำตอบถูกบันทึกทันทีทุกครั้งที่กด (กันคำตอบหายตอน refresh) แต่ต้องไม่โชว์
+  // ให้ผู้บรรยายเห็นความคืบหน้า/คะแนนก่อนที่ผู้เข้าร่วมจะกด Submit จริง — จึงเช็ค submittedAt ก่อนเสมอ
+  if(!s[submittedField]) return { correct:0, under:0, over:0, underMag:0, overMag:0, answered:0 };
   const ans = s[field] || {};
   let correct=0, answered=0, under=0, over=0, underMag=0, overMag=0;
   ids.forEach(qid=>{

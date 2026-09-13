@@ -115,7 +115,8 @@ const firebaseConfig = {
   measurementId: "G-BEW4ZE5WSR"
 };
 
-const fbApp = initializeApp(firebaseConfig);
+// ตั้งชื่อ app instance แยกจากหน้าอื่น กัน Auth session ชนกันข้ามแท็บ
+const fbApp = initializeApp(firebaseConfig, "participant");
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
@@ -132,6 +133,7 @@ let myStudentId = null;
 let classroomId = null;
 let className = '';
 let myName = '';
+let myDept = '';
 let classroom = null;
 let unsubRoom = null;
 let questionCache = {};
@@ -153,7 +155,7 @@ function saveParticipantSession(){
   localStorage.setItem(PARTICIPANT_SESSION_KEY, JSON.stringify({
     version: 2, role: 'participant',
     authUid: uid, classroomId, studentId: myStudentId,
-    name: myName, dept: document.getElementById('deptInput')?.value?.trim() || '',
+    name: myName, dept: myDept,
     savedAt: Date.now()
   }));
 }
@@ -181,6 +183,7 @@ async function restoreParticipantSession(){
     myStudentId = saved.studentId;
     className = roomData.name || '';
     myName = studentData.name || saved.name || '';
+    myDept = studentData.dept || saved.dept || '';
 
     myAnswers.pretestAnswers = studentData.pretestAnswers || {};
     myAnswers.posttestAnswers = studentData.posttestAnswers || {};
@@ -276,6 +279,7 @@ async function doJoin(){
   classroomId = roomDoc.id;
   className = roomDoc.data().name;
   myName = name;
+  myDept = dept;
 
   // Identity ของ participant ผูกกับ Firebase Anonymous UID ไม่ใช่ชื่อ
   // ชื่อซ้ำกันจึงไม่สามารถทำให้ผู้เข้าร่วมสองคนใช้ record เดียวกันได้

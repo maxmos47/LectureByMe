@@ -99,7 +99,8 @@ const firebaseConfig = {
   appId: "1:633622263197:web:58dd3900599a34e2b12b74",
   measurementId: "G-BEW4ZE5WSR"
 };
-const fbApp = initializeApp(firebaseConfig);
+// ตั้งชื่อ app instance แยกจากหน้าอื่น กัน Auth session ชนกันข้ามแท็บ
+const fbApp = initializeApp(firebaseConfig, "dashboard");
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
@@ -153,6 +154,10 @@ async function ensureQuestionsCached(ids, topicId){
 }
 function scoreStudent(s, phase, ids){
   const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const submittedField = phase==='pretest' ? 'pretestSubmittedAt' : 'posttestSubmittedAt';
+  // เช่นเดียวกับหน้า presenter: ต้องรอ submittedAt ก่อน ไม่งั้นจอใหญ่จะโชว์คะแนน/อันดับ
+  // ที่ยังทำไม่เสร็จ ทำให้คนอื่นเห็นคำตอบที่ยังไม่ได้ตั้งใจส่งจริง
+  if(!s[submittedField]) return { correct:0, answered:0 };
   const ans = s[field] || {};
   let correct=0, answered=0;
   ids.forEach(qid=>{
@@ -231,9 +236,18 @@ async function renderDashboard(){
         <div class="roomtitle">${classroom.name}</div>
         <div class="roomcode">รหัส ${classroom.code}</div>
       </div>
-      <div class="live-pill"><span class="live-dot"></span> LIVE</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="live-pill"><span class="live-dot"></span> LIVE</div>
+        <button id="exitDashBtn" style="background:var(--paper-raised); color:#fff; border:1px solid var(--line);
+          border-radius:10px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer;">ออก / เปลี่ยนห้อง</button>
+      </div>
     </div>
   `;
+
+  function bindExitBtn(){
+    const btn = document.getElementById('exitDashBtn');
+    if(btn) btn.addEventListener('click', exitDashboard);
+  }
 
   if(mode === 'lobby'){
     root.innerHTML = `<div class="wrap">${header}
@@ -241,6 +255,7 @@ async function renderDashboard(){
       <div class="statusband">รอผู้บรรยายเริ่มกิจกรรม<div class="sub">แชร์รหัส ${classroom.code} ให้ผู้เข้าร่วมกรอกเข้าห้องได้เลย</div></div>
       ${renderParticipantPanel()}
     </div>`;
+    bindExitBtn();
     return;
   }
   if(mode === 'lecture'){
@@ -249,6 +264,7 @@ async function renderDashboard(){
       <div class="statusband">🎤 กำลังบรรยาย</div>
       ${renderParticipantPanel()}
     </div>`;
+    bindExitBtn();
     return;
   }
   if(mode === 'ended'){
@@ -258,6 +274,16 @@ async function renderDashboard(){
     return renderLeaderboard(header, n, mode, mode==='pretest' ? 'Pretest — คะแนนสด' : 'Post-test — คะแนนสด');
   }
   root.innerHTML = `<div class="wrap">${header}<div class="statusband">กำลังโหลด...</div></div>`;
+  bindExitBtn();
+}
+
+function exitDashboard(){
+  if(unsubRoom) unsubRoom();
+  if(unsubStudents) unsubStudents();
+  unsubRoom = null; unsubStudents = null;
+  classroom = null; classroomId = null; students = [];
+  try{ clearDashboardSession(); }catch(e){}
+  renderEntry();
 }
 
 async function renderLeaderboard(header, n, phase, title){
@@ -305,6 +331,8 @@ async function renderLeaderboard(header, n, phase, title){
       ${renderParticipantPanel()}
     </div>
   `;
+  const exitBtn = document.getElementById('exitDashBtn');
+  if(exitBtn) exitBtn.addEventListener('click', exitDashboard);
 }
 </script>
 </body>
