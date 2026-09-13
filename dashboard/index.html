@@ -64,6 +64,19 @@
   .rprogress .fill{height:100%; background:var(--teal); border-radius:5px;}
   .empty-row{padding:60px; text-align:center; color:#7FA8AC; font-size:20px;}
 
+  .podium-wrap{display:flex; align-items:flex-end; justify-content:center; gap:24px; margin:20px 0 36px; flex-wrap:wrap;}
+  .podium-col{display:flex; flex-direction:column; align-items:center; width:220px;}
+  .podium-medal{font-size:44px; margin-bottom:8px;}
+  .podium-name{font-size:22px; font-weight:800; text-align:center; margin-bottom:2px; max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .podium-dept{font-size:14px; color:#8FC7CC; margin-bottom:8px; text-align:center;}
+  .podium-score{font-size:30px; font-weight:800; margin-bottom:14px;}
+  .podium-bar{width:100%; border-radius:16px 16px 0 0; display:flex; align-items:flex-start; justify-content:center;
+    padding-top:16px; font-size:38px; font-weight:800; color:rgba(10,46,51,.55);}
+  .podium-bar.gold{height:210px; background:linear-gradient(180deg,#F7D678,var(--gold));}
+  .podium-bar.silver{height:160px; background:linear-gradient(180deg,#E4E9ED,var(--silver));}
+  .podium-bar.bronze{height:120px; background:linear-gradient(180deg,#E9B98A,var(--bronze));}
+  .ended-banner{text-align:center; padding:24px 20px 4px; font-size:32px; font-weight:800; color:#F0C24B;}
+
   .participant-panel{background:var(--paper-raised); border:1px solid var(--line); border-radius:20px; overflow:hidden; margin-top:20px;}
   .participant-head{display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid var(--line);}
   .participant-head .title{font-size:18px; font-weight:800;}
@@ -268,7 +281,7 @@ async function renderDashboard(){
     return;
   }
   if(mode === 'ended'){
-    return renderLeaderboard(header, n, 'posttest', 'ผลสรุปสุดท้าย (Post-test)');
+    return renderEndedScreen(header, n);
   }
   if(mode === 'pretest' || mode === 'posttest'){
     return renderLeaderboard(header, n, mode, mode==='pretest' ? 'Pretest — คะแนนสด' : 'Post-test — คะแนนสด');
@@ -284,6 +297,82 @@ function exitDashboard(){
   classroom = null; classroomId = null; students = [];
   try{ clearDashboardSession(); }catch(e){}
   renderEntry();
+}
+
+async function renderEndedScreen(header, n){
+  const preIds = classroom.pretestQuestionIds, postIds = classroom.posttestQuestionIds;
+  await ensureQuestionsCached(preIds, classroom.pretestTopicId);
+  await ensureQuestionsCached(postIds, classroom.posttestTopicId);
+
+  const combined = students.map(s=>{
+    const pre = scoreStudent(s, 'pretest', preIds);
+    const post = scoreStudent(s, 'posttest', postIds);
+    return {
+      name: s.name, dept: s.dept,
+      preSubmitted: !!s.pretestSubmittedAt, postSubmitted: !!s.posttestSubmittedAt,
+      pre: pre.correct, post: post.correct
+    };
+  });
+
+  // Top 3 จัดอันดับจากคะแนน Post-test (เฉพาะคนที่ส่งจริงแล้ว)
+  const top3 = combined.filter(c => c.postSubmitted).sort((a,b) => b.post - a.post).slice(0, 3);
+
+  // Most Improved: ต้องทำครบทั้ง Pre และ Post ถึงจะเทียบพัฒนาการได้
+  const improved = combined
+    .filter(c => c.preSubmitted && c.postSubmitted)
+    .map(c => ({ ...c, delta: c.post - c.pre }))
+    .sort((a,b) => b.delta - a.delta);
+  const mostImproved = improved.length ? improved[0] : null;
+
+  const podiumOrder = top3.length === 3 ? [top3[1], top3[0], top3[2]]
+    : top3.length === 2 ? [top3[1], top3[0]]
+    : top3;
+  const podiumClass = ['silver','gold','bronze'];
+  const podiumMedal = ['🥈','🥇','🥉'];
+  // จัดตำแหน่ง class/medal ให้ตรงกับอันดับจริงของแต่ละคนใน podiumOrder เทียบกับ top3 เดิม
+  const classFor = (person) => podiumClass[top3.indexOf(person)];
+  const medalFor = (person) => podiumMedal[top3.indexOf(person)];
+
+  const podiumHtml = podiumOrder.length ? `
+    <div class="podium-wrap">
+      ${podiumOrder.map(p => `
+        <div class="podium-col">
+          <div class="podium-medal">${medalFor(p)}</div>
+          <div class="podium-name">${p.name}</div>
+          ${p.dept ? `<div class="podium-dept">${p.dept}</div>` : ''}
+          <div class="podium-score">${p.post}/${postIds.length}</div>
+          <div class="podium-bar ${classFor(p)}"></div>
+        </div>
+      `).join('')}
+    </div>
+  ` : `<div class="statusband" style="padding:30px 20px;">ยังไม่มีผู้ส่ง Post-test</div>`;
+
+  const awardHtml = mostImproved ? `
+    <div style="text-align:center; margin-top:8px;">
+      <div style="font-size:20px; font-weight:800; color:var(--gold); margin-bottom:16px;">⭐ รางวัลพัฒนาการยอดเยี่ยม (Most Improved) ⭐</div>
+      <div class="stat-card" style="max-width:440px; margin:0 auto; padding:30px;">
+        <div class="num" style="font-size:32px;">${mostImproved.name}</div>
+        <div class="lab" style="font-size:15px; margin-top:4px;">${mostImproved.dept || ''}</div>
+        <div style="font-size:28px; font-weight:800; color:#4FB37E; margin-top:14px;">+${mostImproved.delta} คะแนน</div>
+        <div class="lab" style="margin-top:6px;">Pretest ${mostImproved.pre}/${preIds.length} → Post-test ${mostImproved.post}/${postIds.length}</div>
+      </div>
+    </div>
+  ` : `<div class="small-muted" style="text-align:center; margin-top:20px;">ยังไม่มีใครทำครบทั้ง Pretest และ Post-test เพื่อเทียบพัฒนาการ</div>`;
+
+  root.innerHTML = `
+    <div class="wrap">
+      ${header}
+      <div class="ended-banner">🎉 จบการนำเสนอแล้ว</div>
+      <div class="stat-row" style="margin-top:20px;">
+        <div class="stat-card" style="grid-column:1/-1;"><div class="num">${n}</div><div class="lab">ผู้เข้าร่วมทั้งหมด</div></div>
+      </div>
+      ${podiumHtml}
+      ${awardHtml}
+      ${renderParticipantPanel()}
+    </div>
+  `;
+  const exitBtn = document.getElementById('exitDashBtn');
+  if(exitBtn) exitBtn.addEventListener('click', exitDashboard);
 }
 
 async function renderLeaderboard(header, n, phase, title){
