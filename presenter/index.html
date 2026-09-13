@@ -132,7 +132,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, inMemoryPersistence
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  onAuthStateChanged, signOut, setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
@@ -171,9 +172,6 @@ let selectedTopicId = null;
 let csvPreview = null;
 let resultsTab = 'pretest'; // 'pretest' | 'posttest' | 'compare'
 
-let presenterAuthed = false;
-const PRESENTER_PASSCODE = "triage2026"; // TODO: เปลี่ยนรหัสผ่านตรงนี้เป็นของคุณเอง
-
 function swatch(i){ return `<span class="swatch" style="background:${LEVEL_COLORS[i]}"></span>`; }
 function genCode(){
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -183,37 +181,63 @@ function genCode(){
 function csvEscape(v){ const s=(v===null||v===undefined)?'':String(v); return '"'+s.replace(/"/g,'""')+'"'; }
 function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-// ---------- AUTH ----------
-setPersistence(auth, inMemoryPersistence).then(()=>{
+let presenterAuthed = false;
+
+// ---------- AUTH (Email/Password — คงที่ทุกเครื่อง ไม่ใช่ anonymous) ----------
+setPersistence(auth, browserLocalPersistence).then(()=>{
   onAuthStateChanged(auth, (user)=>{
-    if(user){ uid = user.uid; statusBadge.textContent = presenterAuthed ? 'PRESENTER' : 'ล็อกอยู่'; render(); }
-  });
-  signInAnonymously(auth).catch(err=>{
-    statusBadge.textContent = 'เชื่อมต่อไม่สำเร็จ';
-    root.innerHTML = `<div class="card"><div class="status-box">เข้าสู่ระบบไม่สำเร็จ: ${err.message}</div></div>`;
+    if(user){
+      uid = user.uid; presenterAuthed = true;
+      statusBadge.textContent = 'PRESENTER'; view='classrooms'; render();
+    } else {
+      presenterAuthed = false;
+      renderLogin();
+    }
   });
 });
 
-// ---------- PRESENTER GATE ----------
-function renderGate(){
+// ---------- LOGIN / SIGN UP ----------
+let loginMode = 'signin'; // 'signin' | 'signup'
+function renderLogin(){
   titleText.textContent = "เข้าสู่ระบบผู้บรรยาย";
-  statusBadge.textContent = 'ล็อกอยู่';
+  statusBadge.textContent = 'ยังไม่ได้ล็อกอิน';
   root.innerHTML = `
     <div class="card">
-      <p class="lead">กรุณาใส่รหัสผ่านผู้บรรยายเพื่อเข้าใช้งานแผงควบคุม</p>
-      <input type="password" id="passInput" placeholder="รหัสผ่าน" autofocus>
-      <div class="errtag" id="passErr" style="display:none; margin:-8px 0 12px;">รหัสผ่านไม่ถูกต้อง</div>
-      <button class="primary" id="passBtn">เข้าสู่ระบบ</button>
+      <div class="navrow">
+        <button id="tabSignin" class="${loginMode==='signin'?'active':''}">เข้าสู่ระบบ</button>
+        <button id="tabSignup" class="${loginMode==='signup'?'active':''}">สร้างบัญชีใหม่ (ครั้งแรก)</button>
+      </div>
+      <p class="lead">${loginMode==='signin' ? 'ใช้อีเมล/รหัสผ่านเดียวกันได้จากทุกเครื่อง เพื่อเข้าถึง Classroom เดิมของคุณ' : 'สร้างบัญชีสำหรับตัวคุณเอง (ทำครั้งเดียว) แล้วใช้ล็อกอินได้จากทุกเครื่องในครั้งถัดไป'}</p>
+      <label for="emailInput">อีเมล</label>
+      <input type="text" id="emailInput" placeholder="you@example.com">
+      <label for="passInput">รหัสผ่าน</label>
+      <input type="password" id="passInput" placeholder="อย่างน้อย 6 ตัวอักษร">
+      <div class="errtag" id="loginErr" style="display:none; margin:-8px 0 12px;"></div>
+      <button class="primary" id="loginBtn">${loginMode==='signin' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}</button>
     </div>
   `;
-  const passInput = document.getElementById('passInput');
-  const tryLogin = ()=>{
-    if(passInput.value === PRESENTER_PASSCODE){
-      presenterAuthed = true; statusBadge.textContent = 'PRESENTER'; view='classrooms'; render();
-    } else { document.getElementById('passErr').style.display = 'block'; }
+  document.getElementById('tabSignin').addEventListener('click', ()=>{ loginMode='signin'; renderLogin(); });
+  document.getElementById('tabSignup').addEventListener('click', ()=>{ loginMode='signup'; renderLogin(); });
+
+  const doSubmit = async ()=>{
+    const email = document.getElementById('emailInput').value.trim();
+    const pass = document.getElementById('passInput').value;
+    const errEl = document.getElementById('loginErr');
+    errEl.style.display = 'none';
+    if(!email || !pass){ errEl.textContent='กรุณากรอกอีเมลและรหัสผ่าน'; errEl.style.display='block'; return; }
+    try{
+      if(loginMode === 'signin'){
+        await signInWithEmailAndPassword(auth, email, pass);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, pass);
+      }
+    }catch(e){
+      errEl.textContent = e.message.replace('Firebase: ','');
+      errEl.style.display = 'block';
+    }
   };
-  document.getElementById('passBtn').addEventListener('click', tryLogin);
-  passInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryLogin(); });
+  document.getElementById('loginBtn').addEventListener('click', doSubmit);
+  document.getElementById('passInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doSubmit(); });
 }
 
 // ---------- NAV ----------
@@ -274,9 +298,13 @@ async function renderClassroomsList(){
       <label style="margin-bottom:8px;">Classroom ที่เคยสร้าง</label>
       ${roomsHtml}
     </div>
+    <div class="card">
+      <button class="ghost" id="logoutBtn" style="width:100%;">ออกจากระบบ (${auth.currentUser?.email || ''})</button>
+    </div>
   `;
   bindNav();
   document.getElementById('newRoomBtn').addEventListener('click', ()=>{ view='classroom-new'; render(); });
+  document.getElementById('logoutBtn').addEventListener('click', ()=> signOut(auth));
   root.querySelectorAll('[data-id]').forEach(btn=>{
     btn.addEventListener('click', ()=> enterRoom(btn.dataset.id));
   });
@@ -995,7 +1023,7 @@ async function confirmImport(){
 
 // ============ ROUTER ============
 function render(){
-  if(!presenterAuthed){ renderGate(); return; }
+  if(!presenterAuthed){ renderLogin(); return; }
   if(view === 'classrooms') renderClassroomsList();
   else if(view === 'classroom-new') renderClassroomNew();
   else if(view === 'classroom-control') renderRoom();

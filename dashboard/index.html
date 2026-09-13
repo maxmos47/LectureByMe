@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B3A40">
+<title>Triage Session · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B2A2E; --paper:#0A2E33; --paper-raised:#0F3A40; --line:#1C4D53;
+    --teal:#1B8A93; --teal-deep:#0A2E33; --teal-soft:#12525A;
+    --l1:#E15850; --l2:#F0994A; --l3:#EFC13B; --l4:#4FB37E; --l5:#5A9BC9;
+    --gold:#F0C24B; --silver:#C9CFD6; --bronze:#D89A5E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'IBM Plex Sans Thai','IBM Plex Sans',-apple-system,sans-serif;
+    background:var(--paper); color:#fff; min-height:100vh;}
+  .wrap{max-width:1400px; margin:0 auto; padding:28px 36px 40px;}
+  .entry-wrap{max-width:480px; margin:80px auto; padding:0 20px;}
+  .entry-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:20px; padding:36px;}
+  .entry-card h1{font-size:22px; margin:0 0 18px; font-weight:700;}
+  input[type=text]{width:100%; padding:16px 18px; border:2px solid var(--line); border-radius:12px;
+    font-size:20px; margin-bottom:16px; background:var(--paper); color:#fff; text-transform:uppercase; letter-spacing:.08em;}
+  input::placeholder{color:#7FA8AC;}
+  button.enter{background:var(--teal); color:#fff; border:none; border-radius:12px; padding:16px 20px;
+    font-size:18px; font-weight:700; cursor:pointer; width:100%;}
+  .errtag{color:var(--l1); font-size:14px; margin:-8px 0 14px;}
+
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:28px;}
+  .roomtitle{font-size:26px; font-weight:800;}
+  .roomcode{font-size:16px; color:#8FC7CC; font-weight:600; letter-spacing:.05em;}
+  .live-pill{display:flex; align-items:center; gap:8px; background:var(--paper-raised); padding:8px 18px;
+    border-radius:30px; border:1px solid var(--line); font-size:14px; font-weight:700;}
+  .live-dot{width:10px; height:10px; border-radius:50%; background:var(--l4); animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.35;}}
+
+  .statusband{text-align:center; padding:80px 20px; font-size:34px; font-weight:800; color:#B9D8DB;}
+  .statusband .sub{font-size:18px; font-weight:500; color:#7FA8AC; margin-top:10px;}
+
+  .stat-row{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-bottom:28px;}
+  .stat-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:18px; padding:26px; text-align:center;}
+  .stat-card .num{font-size:56px; font-weight:800; line-height:1.1;}
+  .stat-card .lab{font-size:15px; color:#8FC7CC; margin-top:8px; font-weight:600;}
+
+  .board{background:var(--paper-raised); border:1px solid var(--line); border-radius:20px; overflow:hidden;}
+  .board-head{display:grid; grid-template-columns:70px 1fr 140px 160px; padding:16px 26px; font-size:14px;
+    color:#8FC7CC; font-weight:700; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--line);}
+  .row{display:grid; grid-template-columns:70px 1fr 140px 160px; align-items:center; padding:16px 26px;
+    font-size:22px; border-bottom:1px solid var(--line); transition:background .2s;}
+  .row:last-child{border-bottom:none;}
+  .row.top1{background:linear-gradient(90deg, rgba(240,194,75,.16), transparent);}
+  .row.top2{background:linear-gradient(90deg, rgba(201,207,214,.12), transparent);}
+  .row.top3{background:linear-gradient(90deg, rgba(216,154,94,.12), transparent);}
+  .rank{font-weight:800; font-size:24px; color:#8FC7CC;}
+  .rank.medal{font-size:30px;}
+  .rname{font-weight:700;}
+  .rdept{font-size:15px; color:#8FC7CC; font-weight:400; margin-top:2px;}
+  .rscore{font-weight:800; text-align:right; padding-right:20px;}
+  .rprogress{text-align:right; color:#8FC7CC; font-size:16px;}
+  .rprogress .bar{display:inline-block; width:100px; height:8px; background:var(--paper); border-radius:5px; overflow:hidden; vertical-align:middle; margin-right:8px;}
+  .rprogress .fill{height:100%; background:var(--teal); border-radius:5px;}
+  .empty-row{padding:60px; text-align:center; color:#7FA8AC; font-size:20px;}
+</style>
+</head>
+<body>
+<div id="root"><div class="entry-wrap"><div class="entry-card"><h1>กำลังเตรียมระบบ...</h1></div></div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, collection, query, where, getDocs, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDNO-XsILUd4_Wm6WPiJUCd4t032GYAzx4",
+  authDomain: "lecturebymyself-44dd8.firebaseapp.com",
+  projectId: "lecturebymyself-44dd8",
+  storageBucket: "lecturebymyself-44dd8.firebasestorage.app",
+  messagingSenderId: "633622263197",
+  appId: "1:633622263197:web:58dd3900599a34e2b12b74",
+  measurementId: "G-BEW4ZE5WSR"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+const root = document.getElementById('root');
+let classroomId = null, classroom = null, students = [];
+let questionCache = {};
+let unsubRoom = null, unsubStudents = null;
+
+async function getQuestion(topicId, qid){
+  if(questionCache[qid]) return questionCache[qid];
+  try{
+    const snap = await getDoc(doc(db,'question_bank',topicId,'questions',qid));
+    if(snap.exists()){ questionCache[qid] = { id:qid, ...snap.data() }; return questionCache[qid]; }
+  }catch(e){}
+  return { correct:0 };
+}
+async function ensureQuestionsCached(ids, topicId){
+  for(const qid of ids){ if(!questionCache[qid]) await getQuestion(topicId, qid); }
+}
+function scoreStudent(s, phase, ids){
+  const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
+  const ans = s[field] || {};
+  let correct=0, answered=0;
+  ids.forEach(qid=>{
+    if(ans[qid]===undefined) return;
+    answered++;
+    if(questionCache[qid] && ans[qid]===questionCache[qid].correct) correct++;
+  });
+  return { correct, answered };
+}
+
+setPersistence(auth, browserLocalPersistence).then(()=>{
+  onAuthStateChanged(auth, (user)=>{ if(user) renderEntry(); });
+  signInAnonymously(auth).catch(err=>{
+    root.innerHTML = `<div class="entry-wrap"><div class="entry-card"><h1>เชื่อมต่อไม่สำเร็จ: ${err.message}</h1></div></div>`;
+  });
+});
+
+function renderEntry(){
+  const urlCode = new URLSearchParams(location.search).get('code');
+  root.innerHTML = `
+    <div class="entry-wrap">
+      <div class="entry-card">
+        <h1>เปิด Dashboard สำหรับ Classroom</h1>
+        <input type="text" id="codeInput" placeholder="รหัส Classroom เช่น A7K2P" value="${urlCode||''}">
+        <div class="errtag" id="err" style="display:none;"></div>
+        <button class="enter" id="goBtn">เปิด Dashboard</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('goBtn').addEventListener('click', joinDashboard);
+  document.getElementById('codeInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') joinDashboard(); });
+  if(urlCode) joinDashboard();
+}
+
+async function joinDashboard(){
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  const err = document.getElementById('err');
+  if(!code){ err.textContent='กรุณากรอกรหัส Classroom'; err.style.display='block'; return; }
+  const snap = await getDocs(query(collection(db,'classrooms'), where('code','==',code)));
+  if(snap.empty){ err.textContent='ไม่พบ Classroom นี้'; err.style.display='block'; return; }
+  classroomId = snap.docs[0].id;
+
+  unsubRoom = onSnapshot(doc(db,'classrooms',classroomId), (s)=>{
+    if(!s.exists()) return;
+    classroom = { id:classroomId, ...s.data() };
+    renderDashboard();
+  });
+  unsubStudents = onSnapshot(collection(db,'classrooms',classroomId,'students'), (s)=>{
+    students = []; s.forEach(d=>students.push({ id:d.id, ...d.data() }));
+    renderDashboard();
+  });
+}
+
+async function renderDashboard(){
+  if(!classroom) return;
+  const mode = classroom.mode || 'lobby';
+  const n = students.length;
+
+  const header = `
+    <div class="topbar">
+      <div>
+        <div class="roomtitle">${classroom.name}</div>
+        <div class="roomcode">รหัส ${classroom.code}</div>
+      </div>
+      <div class="live-pill"><span class="live-dot"></span> LIVE</div>
+    </div>
+  `;
+
+  if(mode === 'lobby'){
+    root.innerHTML = `<div class="wrap">${header}
+      <div class="stat-row"><div class="stat-card" style="grid-column:1/-1;"><div class="num">${n}</div><div class="lab">ผู้เข้าร่วมทั้งหมด</div></div></div>
+      <div class="statusband">รอผู้บรรยายเริ่มกิจกรรม<div class="sub">แชร์รหัส ${classroom.code} ให้ผู้เข้าร่วมกรอกเข้าห้องได้เลย</div></div>
+    </div>`;
+    return;
+  }
+  if(mode === 'lecture'){
+    root.innerHTML = `<div class="wrap">${header}
+      <div class="stat-row"><div class="stat-card" style="grid-column:1/-1;"><div class="num">${n}</div><div class="lab">ผู้เข้าร่วมทั้งหมด</div></div></div>
+      <div class="statusband">🎤 กำลังบรรยาย</div>
+    </div>`;
+    return;
+  }
+  if(mode === 'ended'){
+    return renderLeaderboard(header, n, 'posttest', 'ผลสรุปสุดท้าย (Post-test)');
+  }
+  if(mode === 'pretest' || mode === 'posttest'){
+    return renderLeaderboard(header, n, mode, mode==='pretest' ? 'Pretest — คะแนนสด' : 'Post-test — คะแนนสด');
+  }
+  root.innerHTML = `<div class="wrap">${header}<div class="statusband">กำลังโหลด...</div></div>`;
+}
+
+async function renderLeaderboard(header, n, phase, title){
+  const ids = phase==='pretest' ? classroom.pretestQuestionIds : classroom.posttestQuestionIds;
+  const topicId = phase==='pretest' ? classroom.pretestTopicId : classroom.posttestTopicId;
+  await ensureQuestionsCached(ids, topicId);
+
+  const results = students.map(s=>{
+    const { correct, answered } = scoreStudent(s, phase, ids);
+    return { name:s.name, dept:s.dept, correct, answered };
+  }).sort((a,b)=> b.correct-a.correct || b.answered-a.answered);
+
+  const finished = results.filter(r=>r.answered===ids.length).length;
+  const avgScore = results.length ? (results.reduce((s,r)=>s+r.correct,0)/results.length) : 0;
+
+  const medals = ['🥇','🥈','🥉'];
+  const rows = results.map((r,i)=>{
+    const pct = ids.length ? Math.round((r.answered/ids.length)*100) : 0;
+    const topClass = i<3 ? `top${i+1}` : '';
+    return `
+      <div class="row ${topClass}">
+        <div class="rank ${i<3?'medal':''}">${i<3 ? medals[i] : (i+1)}</div>
+        <div>
+          <div class="rname">${r.name}</div>
+          ${r.dept ? `<div class="rdept">${r.dept}</div>` : ''}
+        </div>
+        <div class="rscore">${r.correct}/${ids.length}</div>
+        <div class="rprogress"><span class="bar"><span class="fill" style="width:${pct}%;"></span></span>${r.answered}/${ids.length}</div>
+      </div>
+    `;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="wrap">
+      ${header}
+      <div class="stat-row">
+        <div class="stat-card"><div class="num">${n}</div><div class="lab">เข้าร่วมทั้งหมด</div></div>
+        <div class="stat-card"><div class="num">${finished}/${n}</div><div class="lab">ทำเสร็จแล้ว</div></div>
+        <div class="stat-card"><div class="num">${avgScore.toFixed(1)}</div><div class="lab">คะแนนเฉลี่ย / ${ids.length}</div></div>
+      </div>
+      <div class="board">
+        <div class="board-head"><div>อันดับ</div><div>ชื่อ</div><div style="text-align:right; padding-right:20px;">คะแนน</div><div style="text-align:right;">ความคืบหน้า</div></div>
+        ${rows || `<div class="empty-row">ยังไม่มีผู้เริ่มทำ</div>`}
+      </div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

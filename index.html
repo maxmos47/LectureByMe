@@ -98,7 +98,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, inMemoryPersistence
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc,
@@ -145,7 +145,7 @@ function genId(){ return 'p_' + Date.now().toString(36) + Math.random().toString
 
 function ctrlKeyUnused(){}
 
-setPersistence(auth, inMemoryPersistence).then(()=>{
+setPersistence(auth, browserLocalPersistence).then(()=>{
   onAuthStateChanged(auth, (user)=>{
     if(user){ uid = user.uid; renderJoin(); }
   });
