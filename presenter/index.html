@@ -113,6 +113,31 @@
   .filerow{border:1.5px dashed var(--line); border-radius:var(--radius-md); padding:20px; text-align:center; margin-bottom:14px;}
   .errtag{color:var(--l1); font-size:11.5px; font-weight:700;}
   .oktag{color:var(--l4); font-size:11.5px; font-weight:700;}
+  .card:hover{box-shadow:var(--shadow-md); transform:translateY(-1px); transition:box-shadow .2s,transform .2s;}
+  .topicpill:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm);}
+  .qcheckrow:hover{border-color:var(--teal); transform:translateY(-1px); box-shadow:var(--shadow-sm);}
+  .qcheckrow.checked{box-shadow:0 0 0 2px rgba(18,82,90,.07);}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#79d99a;margin-right:6px;animation:pulseLive 1.6s ease-in-out infinite;}
+  @keyframes pulseLive{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(121,217,154,.45)}50%{opacity:.7;box-shadow:0 0 0 7px rgba(121,217,154,0)}}
+  .section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;}
+  .section-title{font-size:15px;font-weight:700;color:var(--teal-deep);}
+  .section-sub{font-size:12px;color:#6B7674;margin-top:2px;}
+  .mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--paper);padding:4px;border:1px solid var(--line);border-radius:12px;margin:10px 0 12px;}
+  .mode-toggle button{border:0;background:transparent;border-radius:9px;padding:9px 8px;font:600 12.5px inherit;color:#60706d;cursor:pointer;}
+  .mode-toggle button.active{background:var(--teal);color:#fff;box-shadow:var(--shadow-sm);}
+  .lock-note{background:#FFF7E8;border:1px solid #F0D59B;color:#76571D;border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.5;margin:10px 0;}
+  .success-flash{animation:successFlash .5s ease;}
+  @keyframes successFlash{0%{transform:scale(.98);opacity:.5}100%{transform:scale(1);opacity:1}}
+  .bank-qrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 4px;border-bottom:1px solid var(--line);}
+  .bank-qrow:last-child{border-bottom:0;}
+  .bank-qtext{font-size:13.5px;font-weight:500;line-height:1.5;}
+  .bank-qmeta{font-size:11.5px;color:#6B7674;margin-top:3px;}
+  .searchbox{position:relative;margin-bottom:10px;}
+  .searchbox input{padding-left:38px;margin-bottom:0;}
+  .searchicon{position:absolute;left:13px;top:12px;color:#7A8784;font-size:16px;pointer-events:none;}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--teal-deep);color:#fff;padding:11px 16px;border-radius:12px;box-shadow:var(--shadow-md);font-size:13px;opacity:0;pointer-events:none;z-index:100;transition:opacity .2s,transform .2s;max-width:min(92vw,520px);text-align:center;}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+
 </style>
 </head>
 <body>
@@ -309,6 +334,7 @@ function bindNav(){
 function leaveRoom(clearSaved=true){
   if(unsubRoom) unsubRoom(); if(unsubStudents) unsubStudents();
   unsubRoom=null; unsubStudents=null; currentClassroom=null; currentStudents=[];
+  editSetState = null;
   if(clearSaved) clearPresenterSession();
 }
 
@@ -366,10 +392,10 @@ async function renderClassroomsList(){
 }
 
 // ============ CLASSROOM CREATE ============
-let newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10, triageMode:true };
+let newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestMode:'random', posttestSelected:[], posttestCount:10, triageMode:true };
 
 async function renderClassroomNew(){
-  newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestCount:10, triageMode:true };
+  newRoomState = { name:'', pretestTopicId:null, pretestSelected:[], posttestTopicId:null, posttestMode:'random', posttestSelected:[], posttestCount:10, triageMode:true };
   root.innerHTML = navBar() + `<div class="card"><div class="status-box">กำลังโหลดคลังข้อสอบ...</div></div>`;
   bindNav();
   const topics = await fetchTopics();
@@ -391,10 +417,17 @@ async function renderClassroomNew(){
       <div id="preQuestionList" style="margin-top:10px;"></div>
     </div>
     <div class="card">
-      <label>2. เลือกหัวข้อสำหรับ Post-test (สุ่มอัตโนมัติ)</label>
+      <div class="section-head"><div><div class="section-title">2. ชุด Post-test</div><div class="section-sub">เลือกเองได้ หรือให้ระบบสุ่มจากคลัง</div></div></div>
+      <div class="mode-toggle" id="postModeToggle">
+        <button type="button" data-mode="random" class="active">🎲 สุ่มอัตโนมัติ</button>
+        <button type="button" data-mode="manual">☑ เลือกข้อเอง</button>
+      </div>
       <div id="postTopicPills">${topics.map(t=>`<span class="topicpill" data-id="${t.id}">${t.name}</span>`).join('')}</div>
-      <label for="postCount" style="margin-top:10px;">จำนวนข้อที่จะสุ่ม</label>
-      <input type="number" id="postCount" value="10" min="1">
+      <div id="postManualList" style="margin-top:10px;"></div>
+      <div id="postCountWrap">
+        <label for="postCount" style="margin-top:10px;">จำนวนข้อที่จะสุ่ม</label>
+        <input type="number" id="postCount" value="10" min="1">
+      </div>
       <div class="small-muted" id="postAvailHint" style="text-align:left; margin-top:-8px;"></div>
     </div>
     <div class="card">
@@ -459,12 +492,33 @@ async function renderClassroomNew(){
     });
   });
 
+  async function loadCreatePostList(){
+    const list = document.getElementById('postManualList');
+    if(newRoomState.posttestMode !== 'manual' || !newRoomState.posttestTopicId){ list.innerHTML=''; return; }
+    const qs = await fetchQuestions(newRoomState.posttestTopicId);
+    list.innerHTML = qs.map(q=>`<div class="qcheckrow ${newRoomState.posttestSelected.includes(q.id)?'checked':''}" data-qid="${q.id}"><input type="checkbox" ${newRoomState.posttestSelected.includes(q.id)?'checked':''}><div>${q.case}<br><span style="color:#6B7674;font-size:12px;">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</span></div></div>`).join('') || '<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
+    list.querySelectorAll('.qcheckrow').forEach(row=>row.addEventListener('click',()=>{
+      const cb=row.querySelector('input'); cb.checked=!cb.checked; row.classList.toggle('checked',cb.checked);
+      const qid=row.dataset.qid;
+      if(cb.checked && !newRoomState.posttestSelected.includes(qid)) newRoomState.posttestSelected.push(qid);
+      else newRoomState.posttestSelected=newRoomState.posttestSelected.filter(x=>x!==qid);
+      validateCreate();
+    }));
+  }
+  root.querySelectorAll('#postModeToggle button').forEach(b=>b.addEventListener('click',async()=>{
+    newRoomState.posttestMode=b.dataset.mode;
+    root.querySelectorAll('#postModeToggle button').forEach(x=>x.classList.toggle('active',x.dataset.mode===newRoomState.posttestMode));
+    document.getElementById('postCountWrap').style.display=newRoomState.posttestMode==='random'?'block':'none';
+    if(newRoomState.posttestMode==='manual') await loadCreatePostList(); else document.getElementById('postManualList').innerHTML='';
+    validateCreate();
+  }));
+
   document.getElementById('roomName').addEventListener('input', (e)=>{ newRoomState.name = e.target.value; validateCreate(); });
   document.getElementById('postCount').addEventListener('input', (e)=>{ newRoomState.posttestCount = parseInt(e.target.value||'0',10); validateCreate(); });
 
   function validateCreate(){
-    const ok = newRoomState.name.trim() && newRoomState.pretestTopicId && newRoomState.pretestSelected.length>0
-      && newRoomState.posttestTopicId && newRoomState.posttestCount>0;
+    const postOk = newRoomState.posttestTopicId && (newRoomState.posttestMode==='manual' ? newRoomState.posttestSelected.length>0 : newRoomState.posttestCount>0);
+    const ok = newRoomState.name.trim() && newRoomState.pretestTopicId && newRoomState.pretestSelected.length>0 && postOk;
     document.getElementById('createRoomBtn').disabled = !ok;
   }
 
@@ -492,10 +546,15 @@ async function createClassroom(){
   }
 
   const postAll = await fetchQuestions(newRoomState.posttestTopicId);
-  const excludeIds = newRoomState.posttestTopicId === newRoomState.pretestTopicId ? newRoomState.pretestSelected : [];
-  let pool = postAll.filter(q => !excludeIds.includes(q.id));
-  if(pool.length < newRoomState.posttestCount) pool = postAll;
-  const posttestQuestionIds = shuffle(pool).slice(0, newRoomState.posttestCount).map(q=>q.id);
+  let posttestQuestionIds;
+  if(newRoomState.posttestMode==='manual'){
+    posttestQuestionIds = [...newRoomState.posttestSelected];
+  }else{
+    const excludeIds = newRoomState.posttestTopicId === newRoomState.pretestTopicId ? newRoomState.pretestSelected : [];
+    let pool = postAll.filter(q => !excludeIds.includes(q.id));
+    if(pool.length < newRoomState.posttestCount) pool = postAll;
+    posttestQuestionIds = shuffle(pool).slice(0, newRoomState.posttestCount).map(q=>q.id);
+  }
 
   const data = {
     name: newRoomState.name.trim(),
@@ -506,6 +565,9 @@ async function createClassroom(){
     pretestQuestionIds: newRoomState.pretestSelected,
     posttestTopicId: newRoomState.posttestTopicId,
     posttestQuestionIds,
+    posttestSelectionMode: newRoomState.posttestMode,
+    pretestStartedAt: null,
+    posttestStartedAt: null,
     updatedAt: serverTimestamp()
   };
   const ref = await addDoc(collection(db,'classrooms'), data);
@@ -637,7 +699,12 @@ function modeControlHtml(){
 function bindModeControl(){
   ['lecture','pretest','posttest'].forEach(key=>{
     const el = document.getElementById('mode_'+key);
-    if(el) el.addEventListener('click', ()=> updateRoom({ mode:key }));
+    if(el) el.addEventListener('click', async ()=>{
+      const fields={mode:key};
+      if(key==='pretest' && !currentClassroom.pretestStartedAt) fields.pretestStartedAt=serverTimestamp();
+      if(key==='posttest' && !currentClassroom.posttestStartedAt) fields.posttestStartedAt=serverTimestamp();
+      await updateRoom(fields);
+    });
   });
   const endBtn = document.getElementById('mode_ended');
   if(endBtn){
@@ -671,32 +738,34 @@ async function resetClassroom(){
       snap.forEach(d => batch.delete(d.ref));
       await batch.commit();
     }
-    await updateRoom({ mode:'lobby' });
+    await updateRoom({ mode:'lobby', pretestStartedAt:null, posttestStartedAt:null });
   }catch(e){
     alert('รีเซ็ตไม่สำเร็จ: ' + e.message);
     if(btn){ btn.disabled = false; btn.textContent = 'รีเซ็ต Classroom (เริ่มรอบใหม่)'; }
   }
 }
 
+const RESULT_TABS = ['pretest','posttest','compare','participants','editset'];
 function resultsTabsHtml(){
   const tab = (key,label) => `<button class="${resultsTab===key?'active':''}" id="tab_${key}">${label}</button>`;
   return `
     <div class="card">
-      <div class="navrow">
+      <div class="navrow" style="flex-wrap:wrap;">
         ${tab('pretest','คะแนนสด · Pretest')}
         ${tab('posttest','คะแนนสด · Post-test')}
         ${tab('compare','เปรียบเทียบ Pre/Post')}
         ${tab('participants','ผู้เข้าร่วม')}
+        ${tab('editset','แก้ไขชุดคำถาม')}
       </div>
       <div id="resultsContent"><div class="status-box">กำลังโหลด...</div></div>
     </div>
   `;
 }
 function bindResultsTabs(){
-  ['pretest','posttest','compare','participants'].forEach(key=>{
+  RESULT_TABS.forEach(key=>{
     document.getElementById('tab_'+key).addEventListener('click', ()=>{
       resultsTab = key;
-      ['pretest','posttest','compare','participants'].forEach(k=>{
+      RESULT_TABS.forEach(k=>{
         document.getElementById('tab_'+k).classList.toggle('active', k===key);
       });
       renderResultsContent();
@@ -823,10 +892,121 @@ async function renderCompare(){
   `;
 }
 
+function isPhaseLocked(phase){
+  const startedField=phase==='pretest'?'pretestStartedAt':'posttestStartedAt';
+  const submittedField=phase==='pretest'?'pretestSubmittedAt':'posttestSubmittedAt';
+  const mode=currentClassroom?.mode||'lobby';
+  return !!(currentClassroom?.[startedField] || currentStudents.some(s=>!!s[submittedField]) || mode===phase || mode==='ended' || (phase==='pretest' && mode==='posttest'));
+}
+function showToast(message){
+  let el=document.getElementById('toast');
+  if(!el){el=document.createElement('div');el.id='toast';el.className='toast';document.body.appendChild(el);}
+  el.textContent=message;el.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>el.classList.remove('show'),1800);
+}
+
 async function renderResultsContent(){
   if(resultsTab === 'compare') await renderCompare();
   else if(resultsTab === 'participants') renderParticipantsList();
+  else if(resultsTab === 'editset') await renderEditQuestionSet();
   else await renderLiveLeaderboard(resultsTab);
+}
+
+// ============ EDIT QUESTION SET (from inside classroom control) ============
+let editSetState = null;
+
+async function renderEditQuestionSet(){
+  const wrap = document.getElementById('resultsContent');
+  wrap.innerHTML = `<div class="status-box" style="margin-top:12px;">กำลังโหลดชุดข้อสอบ...</div>`;
+  const topics = await fetchTopics();
+  if(!editSetState){
+    editSetState = {
+      pretestTopicId: currentClassroom.pretestTopicId,
+      pretestSelected: [...(currentClassroom.pretestQuestionIds||[])],
+      posttestTopicId: currentClassroom.posttestTopicId,
+      posttestMode: currentClassroom.posttestSelectionMode || 'random',
+      posttestSelected: [...(currentClassroom.posttestQuestionIds||[])],
+      posttestCount: (currentClassroom.posttestQuestionIds||[]).length
+    };
+  }
+  const preLocked = isPhaseLocked('pretest');
+  const postLocked = isPhaseLocked('posttest');
+  wrap.innerHTML = `
+    <div style="margin-top:8px;">
+      <div class="card" style="background:linear-gradient(135deg,var(--teal-soft),#fff);">
+        <div class="section-head"><div><div class="section-title">🎯 จัดชุดข้อสอบสำหรับ Classroom นี้</div><div class="section-sub">ตั้งค่าได้ระหว่าง Lobby / Lecture ก่อนเริ่มแต่ละแบบทดสอบ</div></div><span class="badge"><span class="live-dot"></span>REALTIME</span></div>
+        <div class="small-muted" style="text-align:left;margin-top:0;">เมื่อเริ่มทำแบบทดสอบแล้ว ระบบจะล็อกชุดนั้นอัตโนมัติ เพื่อป้องกันคะแนนและคำตอบคลาดเคลื่อน</div>
+      </div>
+
+      <div class="card ${preLocked?'':'success-flash'}">
+        <div class="section-head"><div><div class="section-title">Pretest</div><div class="section-sub">เลือกหัวข้อ + เลือกข้อด้วยตนเอง</div></div>${preLocked?'<span class="errtag">🔒 ล็อกแล้ว</span>':'<span class="oktag">● แก้ไขได้</span>'}</div>
+        ${preLocked?'<div class="lock-note">ชุด Pretest ถูกล็อก เพราะแบบทดสอบเริ่มแล้วหรือมีผู้ส่งคำตอบแล้ว ไม่ควรเปลี่ยนชุดย้อนหลัง</div>':''}
+        <div id="esPreTopicPills">${topics.map(t=>`<span class="topicpill ${t.id===editSetState.pretestTopicId?'active':''}" data-id="${t.id}" ${preLocked?'style="pointer-events:none;opacity:.55"':''}>${t.name}</span>`).join('')}</div>
+        <div id="esPreQuestionList" style="margin-top:10px;"></div>
+        <button class="primary" id="esSavePreBtn" style="margin-top:10px;" ${preLocked?'disabled':''}>บันทึกชุด Pretest</button>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><div><div class="section-title">Post-test</div><div class="section-sub">เลือกเอง หรือสุ่มใหม่จากคลังข้อสอบ</div></div>${postLocked?'<span class="errtag">🔒 ล็อกแล้ว</span>':'<span class="oktag">● แก้ไขได้</span>'}</div>
+        ${postLocked?'<div class="lock-note">ชุด Post-test ถูกล็อก เพราะแบบทดสอบเริ่มแล้วหรือมีผู้ส่งคำตอบแล้ว</div>':''}
+        <div class="mode-toggle" id="esPostModeToggle">
+          <button type="button" data-mode="random" class="${editSetState.posttestMode==='random'?'active':''}" ${postLocked?'disabled':''}>🎲 สุ่มอัตโนมัติ</button>
+          <button type="button" data-mode="manual" class="${editSetState.posttestMode==='manual'?'active':''}" ${postLocked?'disabled':''}>☑ เลือกข้อเอง</button>
+        </div>
+        <div id="esPostTopicPills">${topics.map(t=>`<span class="topicpill ${t.id===editSetState.posttestTopicId?'active':''}" data-id="${t.id}" ${postLocked?'style="pointer-events:none;opacity:.55"':''}>${t.name}</span>`).join('')}</div>
+        <div id="esPostManualList" style="margin-top:10px;"></div>
+        <div id="esPostCountWrap" style="display:${editSetState.posttestMode==='random'?'block':'none'};">
+          <label for="esPostCount" style="margin-top:10px;">จำนวนข้อที่จะสุ่ม</label>
+          <input type="number" id="esPostCount" value="${editSetState.posttestCount}" min="1" ${postLocked?'disabled':''}>
+        </div>
+        <div class="small-muted" id="esPostAvailHint" style="text-align:left;margin-top:-8px;"></div>
+        <button class="primary" id="esSavePostBtn" style="margin-top:10px;" ${postLocked?'disabled':''}>${editSetState.posttestMode==='manual'?'บันทึกชุด Post-test':'สุ่มใหม่และบันทึกชุด Post-test'}</button>
+      </div>
+    </div>`;
+
+  async function loadPreQuestionList(){
+    const qs=await fetchQuestions(editSetState.pretestTopicId); const el=document.getElementById('esPreQuestionList');
+    el.innerHTML=qs.map(q=>`<div class="qcheckrow ${editSetState.pretestSelected.includes(q.id)?'checked':''}" data-qid="${q.id}"><input type="checkbox" ${editSetState.pretestSelected.includes(q.id)?'checked':''} ${preLocked?'disabled':''}><div>${q.case}<br><span style="color:#6B7674;font-size:12px;">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</span></div></div>`).join('')||'<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
+    if(preLocked) return;
+    el.querySelectorAll('.qcheckrow').forEach(row=>row.addEventListener('click',()=>{const cb=row.querySelector('input');cb.checked=!cb.checked;row.classList.toggle('checked',cb.checked);const qid=row.dataset.qid;if(cb.checked&&!editSetState.pretestSelected.includes(qid))editSetState.pretestSelected.push(qid);else editSetState.pretestSelected=editSetState.pretestSelected.filter(x=>x!==qid);}));
+  }
+  async function loadPostQuestionList(){
+    const el=document.getElementById('esPostManualList');
+    if(editSetState.posttestMode!=='manual'){el.innerHTML='';return;}
+    const qs=await fetchQuestions(editSetState.posttestTopicId);
+    el.innerHTML=qs.map(q=>`<div class="qcheckrow ${editSetState.posttestSelected.includes(q.id)?'checked':''}" data-qid="${q.id}"><input type="checkbox" ${editSetState.posttestSelected.includes(q.id)?'checked':''} ${postLocked?'disabled':''}><div>${q.case}<br><span style="color:#6B7674;font-size:12px;">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</span></div></div>`).join('')||'<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
+    if(postLocked) return;
+    el.querySelectorAll('.qcheckrow').forEach(row=>row.addEventListener('click',()=>{const cb=row.querySelector('input');cb.checked=!cb.checked;row.classList.toggle('checked',cb.checked);const qid=row.dataset.qid;if(cb.checked&&!editSetState.posttestSelected.includes(qid))editSetState.posttestSelected.push(qid);else editSetState.posttestSelected=editSetState.posttestSelected.filter(x=>x!==qid);}));
+  }
+  if(editSetState.pretestTopicId) await loadPreQuestionList();
+  if(editSetState.posttestTopicId){ const qs=await fetchQuestions(editSetState.posttestTopicId); document.getElementById('esPostAvailHint').textContent=`มีในคลัง ${qs.length} ข้อ`; }
+  await loadPostQuestionList();
+
+  if(!preLocked) wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(p=>p.addEventListener('click',async()=>{wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(x=>x.classList.remove('active'));p.classList.add('active');editSetState.pretestTopicId=p.dataset.id;editSetState.pretestSelected=[];await loadPreQuestionList();}));
+  if(!postLocked) wrap.querySelectorAll('#esPostTopicPills .topicpill').forEach(p=>p.addEventListener('click',async()=>{wrap.querySelectorAll('#esPostTopicPills .topicpill').forEach(x=>x.classList.remove('active'));p.classList.add('active');editSetState.posttestTopicId=p.dataset.id;editSetState.posttestSelected=[];const qs=await fetchQuestions(p.dataset.id);document.getElementById('esPostAvailHint').textContent=`มีในคลัง ${qs.length} ข้อ`;await loadPostQuestionList();}));
+  if(!postLocked) wrap.querySelectorAll('#esPostModeToggle button').forEach(b=>b.addEventListener('click',async()=>{editSetState.posttestMode=b.dataset.mode;wrap.querySelectorAll('#esPostModeToggle button').forEach(x=>x.classList.toggle('active',x.dataset.mode===editSetState.posttestMode));document.getElementById('esPostCountWrap').style.display=editSetState.posttestMode==='random'?'block':'none';document.getElementById('esSavePostBtn').textContent=editSetState.posttestMode==='manual'?'บันทึกชุด Post-test':'สุ่มใหม่และบันทึกชุด Post-test';await loadPostQuestionList();}));
+  if(!postLocked) document.getElementById('esPostCount').addEventListener('input',e=>editSetState.posttestCount=parseInt(e.target.value||'0',10));
+
+  document.getElementById('esSavePreBtn').addEventListener('click',async()=>{
+    if(preLocked) return;
+    if(!editSetState.pretestTopicId||!editSetState.pretestSelected.length){alert('กรุณาเลือกหัวข้อและอย่างน้อย 1 ข้อสำหรับ Pretest');return;}
+    const btn=document.getElementById('esSavePreBtn');btn.disabled=true;btn.textContent='กำลังบันทึก...';
+    await updateRoom({pretestTopicId:editSetState.pretestTopicId,pretestQuestionIds:[...editSetState.pretestSelected]});
+    btn.disabled=false;btn.textContent='บันทึกชุด Pretest';showToast('บันทึกชุด Pretest แล้ว ✓');
+  });
+  document.getElementById('esSavePostBtn').addEventListener('click',async()=>{
+    if(postLocked) return;
+    let ids=[];
+    if(editSetState.posttestMode==='manual'){
+      if(!editSetState.posttestTopicId||!editSetState.posttestSelected.length){alert('กรุณาเลือกหัวข้อและอย่างน้อย 1 ข้อสำหรับ Post-test');return;}
+      ids=[...editSetState.posttestSelected];
+    }else{
+      if(!editSetState.posttestTopicId||!editSetState.posttestCount){alert('กรุณาเลือกหัวข้อและจำนวนข้อสำหรับ Post-test');return;}
+      const all=await fetchQuestions(editSetState.posttestTopicId);const exclude=editSetState.posttestTopicId===editSetState.pretestTopicId?editSetState.pretestSelected:[];let pool=all.filter(q=>!exclude.includes(q.id));if(pool.length<editSetState.posttestCount)pool=all;ids=shuffle(pool).slice(0,editSetState.posttestCount).map(q=>q.id);
+    }
+    const btn=document.getElementById('esSavePostBtn');btn.disabled=true;btn.textContent='กำลังบันทึก...';
+    await updateRoom({posttestTopicId:editSetState.posttestTopicId,posttestQuestionIds:ids,posttestSelectionMode:editSetState.posttestMode});
+    editSetState.posttestSelected=[...ids];btn.disabled=false;btn.textContent=editSetState.posttestMode==='manual'?'บันทึกชุด Post-test':'สุ่มใหม่และบันทึกชุด Post-test';showToast('บันทึกชุด Post-test แล้ว ✓');
+  });
 }
 
 function renderParticipantsList(){
@@ -987,6 +1167,7 @@ async function renderBank(){
       root.querySelectorAll('#bankTopicPills .topicpill').forEach(x=>x.classList.remove('active'));
       p.classList.add('active');
       selectedTopicId = p.dataset.id;
+      editingQuestionId = null;
       renderTopicDetail();
     });
   });
@@ -995,21 +1176,32 @@ async function renderBank(){
   document.getElementById('csvFileInput').addEventListener('change', handleCsvFile);
 }
 
+let editingQuestionId = null;
+
 async function renderTopicDetail(){
   const wrap = document.getElementById('topicDetailWrap');
   wrap.innerHTML = `<div class="card"><div class="status-box">กำลังโหลดคำถาม...</div></div>`;
   const questions = await fetchQuestions(selectedTopicId);
   const topicName = bankTopics.find(t=>t.id===selectedTopicId)?.name || '';
+  const editingQ = editingQuestionId ? questions.find(q=>q.id===editingQuestionId) : null;
 
   let qRows = questions.map(q=>`
-    <div class="roomrow">
-      <div style="max-width:78%;">
-        <div class="rname" style="font-weight:500; font-size:13.5px;">${q.case}</div>
-        <div class="rmeta">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</div>
+    <div class="bank-qrow">
+      <div style="max-width:66%;">
+        <div class="bank-qtext">${q.case}</div>
+        <div class="bank-qmeta">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}${q.explanation?' · มีคำอธิบาย':''}</div>
       </div>
-      <button class="ghost small" data-del="${q.id}">ลบ</button>
+      <div style="display:flex; gap:6px;">
+        <button class="ghost small" data-edit="${q.id}">แก้ไข</button>
+        <button class="ghost small" data-del="${q.id}" style="border-color:var(--l1); color:var(--l1);">ลบ</button>
+      </div>
     </div>
   `).join('') || '<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
+
+  const formCase = editingQ ? editingQ.case : '';
+  const formOptions = editingQ ? (editingQ.options || OPTIONS_DEFAULT) : OPTIONS_DEFAULT;
+  const formCorrect = editingQ ? editingQ.correct : 0;
+  const formExplanation = editingQ ? (editingQ.explanation || '') : '';
 
   wrap.innerHTML = `
     <div class="card">
@@ -1017,38 +1209,58 @@ async function renderTopicDetail(){
       ${qRows}
     </div>
     <div class="card">
-      <label style="margin-bottom:10px;">เพิ่มคำถามใหม่ในหัวข้อนี้</label>
+      <label style="margin-bottom:10px;">${editingQ ? 'แก้ไขคำถาม' : 'เพิ่มคำถามใหม่ในหัวข้อนี้'}</label>
       <label for="qCase">เคส (Case)</label>
-      <textarea id="qCase" placeholder="เช่น ชาย 65 ปี เจ็บแน่นหน้าอก..."></textarea>
+      <textarea id="qCase" placeholder="เช่น ชาย 65 ปี เจ็บแน่นหน้าอก...">${formCase}</textarea>
       <label>ตัวเลือกและเฉลย</label>
       <div class="opt5" id="optWrap">
-        ${OPTIONS_DEFAULT.map((o,i)=>`
+        ${formOptions.map((o,i)=>`
           <div class="orow">
-            <input type="radio" name="correctOpt" value="${i}" ${i===0?'checked':''}>
+            <input type="radio" name="correctOpt" value="${i}" ${i===formCorrect?'checked':''}>
             <span class="oswatch" style="background:${LEVEL_COLORS[i]}"></span>
             <input type="text" class="optInput" value="${o}" style="flex:1;">
           </div>
         `).join('')}
       </div>
-      <button class="primary" id="addQBtn">บันทึกคำถาม</button>
+      <label for="qExplanation">คำอธิบาย / Teaching point (ถ้ามี)</label>
+      <textarea id="qExplanation" placeholder="อธิบายเหตุผลของเฉลยหรือจุดสอนสำคัญ">${formExplanation}</textarea>
+      <button class="primary" id="addQBtn">${editingQ ? 'บันทึกการแก้ไข' : 'บันทึกคำถาม'}</button>
+      ${editingQ ? `<button class="ghost" id="cancelEditBtn" style="width:100%; margin-top:10px;">ยกเลิกการแก้ไข</button>` : ''}
     </div>
   `;
 
   wrap.querySelectorAll('[data-del]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       await deleteDoc(doc(db,'question_bank',selectedTopicId,'questions',btn.dataset.del));
+      if(editingQuestionId === btn.dataset.del) editingQuestionId = null;
       renderTopicDetail();
     });
   });
+  wrap.querySelectorAll('[data-edit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingQuestionId = btn.dataset.edit;
+      renderTopicDetail();
+      wrap.scrollIntoView({ behavior:'smooth', block:'end' });
+    });
+  });
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editingQuestionId = null; renderTopicDetail(); });
 
   document.getElementById('addQBtn').addEventListener('click', async ()=>{
     const caseText = document.getElementById('qCase').value.trim();
     const optionInputs = [...wrap.querySelectorAll('.optInput')].map(i=>i.value.trim());
     const correct = parseInt(wrap.querySelector('input[name=correctOpt]:checked').value,10);
     if(!caseText || optionInputs.some(o=>!o)) return;
-    await addDoc(collection(db,'question_bank',selectedTopicId,'questions'), {
-      case: caseText, options: optionInputs, correct, createdAt: serverTimestamp()
-    });
+    if(editingQuestionId){
+      await updateDoc(doc(db,'question_bank',selectedTopicId,'questions',editingQuestionId), {
+        case: caseText, options: optionInputs, correct, explanation: document.getElementById('qExplanation').value.trim()
+      });
+      editingQuestionId = null;
+    } else {
+      await addDoc(collection(db,'question_bank',selectedTopicId,'questions'), {
+        case: caseText, options: optionInputs, correct, explanation: document.getElementById('qExplanation').value.trim(), createdAt: serverTimestamp()
+      });
+    }
     renderTopicDetail();
   });
 }
