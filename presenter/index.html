@@ -183,42 +183,68 @@ function csvEscape(v){ const s=(v===null||v===undefined)?'':String(v); return '"
 function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 let presenterAuthed = false;
-const PRESENTER_SESSION_KEY = 'erTriageSession_presenter_v2';
+let presenterAuthInitialized = false;
+let presenterRestoreInProgress = false;
+const PRESENTER_SESSION_KEY = 'erTriageSession_presenter_v3';
 
-function savePresenterSession(){
-  if(!uid || !currentClassroom?.id) return;
-  localStorage.setItem(PRESENTER_SESSION_KEY, JSON.stringify({version:2, role:'presenter', authUid:uid, classroomId:currentClassroom.id, view:'classroom-control', savedAt:Date.now()}));
+// Presenter identity = Firebase Email/Password UID.
+// Classroom session is stored separately so a browser refresh can restore the exact room.
+function savePresenterSession(classroomId = currentClassroom?.id, targetView = 'classroom-control'){
+  if(!uid || !classroomId) return;
+  localStorage.setItem(PRESENTER_SESSION_KEY, JSON.stringify({
+    version:3, role:'presenter', authUid:uid, classroomId, view:targetView, savedAt:Date.now()
+  }));
 }
 function clearPresenterSession(){ localStorage.removeItem(PRESENTER_SESSION_KEY); }
+
 async function restorePresenterSession(){
+  if(presenterRestoreInProgress) return false;
+  presenterRestoreInProgress = true;
   try{
     const raw = localStorage.getItem(PRESENTER_SESSION_KEY);
     if(!raw) return false;
     const saved = JSON.parse(raw);
-    if(saved?.role !== 'presenter' || saved?.version !== 2 || saved.authUid !== uid || !saved.classroomId) return false;
+    if(saved?.role !== 'presenter' || saved?.version !== 3 || saved.authUid !== uid || !saved.classroomId) return false;
+
     const snap = await getDoc(doc(db,'classrooms',saved.classroomId));
-    if(!snap.exists() || snap.data().presenterUid !== uid){ clearPresenterSession(); return false; }
-    await enterRoom(saved.classroomId);
+    if(!snap.exists()){ clearPresenterSession(); return false; }
+    if(snap.data().presenterUid !== uid){ clearPresenterSession(); return false; }
+
+    // Set the session before opening realtime listeners. This prevents a race where
+    // a refresh happens between navigation and the first onSnapshot callback.
+    view = 'classroom-control';
+    await enterRoom(saved.classroomId, {preserveSession:true});
     return true;
-  }catch(e){ console.warn('Could not restore presenter session:', e); return false; }
+  }catch(e){
+    console.warn('Could not restore presenter session:', e);
+    return false;
+  }finally{
+    presenterRestoreInProgress = false;
+  }
 }
 
-// ---------- AUTH (Email/Password — คงที่ทุกเครื่อง ไม่ใช่ anonymous) ----------
+// ---------- AUTH (Email/Password — persistent across refresh) ----------
 statusBadge.textContent = 'กำลังตรวจสอบล็อกอิน...';
-setPersistence(auth, browserLocalPersistence).then(async ()=>{
-  await auth.authStateReady(); // รอให้ Firebase กู้ session เดิมจาก browser storage ก่อนเช็คสถานะ
+setPersistence(auth, browserLocalPersistence).then(()=>{
   onAuthStateChanged(auth, async (user)=>{
-    if(user){
-      try{ await user.getIdToken(true); }catch(e){} // รีเฟรช token กันเคส token ค้างหลัง reload
-      uid = user.uid; presenterAuthed = true;
-      statusBadge.textContent = user.email || 'PRESENTER';
-      const restored = await restorePresenterSession();
-      if(!restored){ view='classrooms'; render(); }
-    } else {
-      presenterAuthed = false;
+    // Firebase can emit the initial state once on startup. Ignore duplicate callbacks
+    // while a restore is already in progress.
+    if(!user){
+      uid = null; presenterAuthed = false; presenterAuthInitialized = true;
       renderLogin();
+      return;
     }
+    uid = user.uid; presenterAuthed = true; presenterAuthInitialized = true;
+    statusBadge.textContent = user.email || 'PRESENTER';
+
+    const restored = await restorePresenterSession();
+    if(!restored && view === 'classroom-control'){
+      view = 'classrooms';
+    }
+    if(!restored) render();
   });
+}).catch(err=>{
+  root.innerHTML = `<div class=\"card\"><div class=\"status-box\">เตรียมระบบล็อกอินไม่สำเร็จ: ${err.message}</div></div>`;
 });
 
 // ---------- LOGIN / SIGN UP ----------
@@ -486,22 +512,52 @@ async function createClassroom(){
 }
 
 // ============ CLASSROOM CONTROL ============
-async function enterRoom(id){
+async function enterRoom(id, {preserveSession=false} = {}){
   leaveRoom(false);
   view = 'classroom-control';
+
+  // Save immediately, before waiting for realtime listeners. This is the key piece
+  // that makes refresh safe even during a live lecture.
+  if(uid) savePresenterSession(id, 'classroom-control');
+
   root.innerHTML = navBar() + `<div class="card"><div class="status-box">กำลังเชื่อมต่อห้อง...</div></div>`;
   bindNav();
 
-  unsubRoom = onSnapshot(doc(db,'classrooms',id), (snap)=>{
-    if(!snap.exists()) return;
-    currentClassroom = { id, ...snap.data() };
-    savePresenterSession();
+  const roomRef = doc(db,'classrooms',id);
+  try{
+    const initial = await getDoc(roomRef);
+    if(!initial.exists() || initial.data().presenterUid !== uid){
+      if(!preserveSession) clearPresenterSession();
+      currentClassroom = null;
+      view = 'classrooms';
+      render();
+      return;
+    }
+    currentClassroom = { id, ...initial.data() };
+    savePresenterSession(id, 'classroom-control');
     renderRoom();
-  });
+  }catch(e){
+    console.warn('Could not open classroom:', e);
+    // Keep the session when this is a transient network/read failure; a later refresh
+    // can retry instead of forcing the presenter to log out and back in.
+    root.innerHTML = navBar() + `<div class="card"><div class="status-box">เชื่อมต่อ Classroom ไม่สำเร็จชั่วคราว<br><button class="primary" id="retryRoomBtn" style="margin-top:12px;">ลองใหม่</button></div></div>`;
+    bindNav();
+    document.getElementById('retryRoomBtn').addEventListener('click', ()=>enterRoom(id,{preserveSession:true}));
+    return;
+  }
+
+  unsubRoom = onSnapshot(roomRef, (snap)=>{
+    if(!snap.exists()){ clearPresenterSession(); leaveRoom(false); view='classrooms'; render(); return; }
+    if(snap.data().presenterUid !== uid){ clearPresenterSession(); leaveRoom(false); view='classrooms'; render(); return; }
+    currentClassroom = { id, ...snap.data() };
+    savePresenterSession(id, 'classroom-control');
+    renderRoom();
+  }, (err)=>{ console.warn('Presenter room listener error:', err); });
+
   unsubStudents = onSnapshot(collection(db,'classrooms',id,'students'), (snap)=>{
     currentStudents = []; snap.forEach(d=> currentStudents.push({ id:d.id, ...d.data() }));
     renderRoom();
-  });
+  }, (err)=>{ console.warn('Presenter students listener error:', err); });
 }
 
 function classBarHtml(){

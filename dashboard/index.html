@@ -63,6 +63,19 @@
   .rprogress .bar{display:inline-block; width:100px; height:8px; background:var(--paper); border-radius:5px; overflow:hidden; vertical-align:middle; margin-right:8px;}
   .rprogress .fill{height:100%; background:var(--teal); border-radius:5px;}
   .empty-row{padding:60px; text-align:center; color:#7FA8AC; font-size:20px;}
+
+  .participant-panel{background:var(--paper-raised); border:1px solid var(--line); border-radius:20px; overflow:hidden; margin-top:20px;}
+  .participant-head{display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid var(--line);}
+  .participant-head .title{font-size:18px; font-weight:800;}
+  .participant-head .count{font-size:14px; color:#8FC7CC; font-weight:700;}
+  .participant-list{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0;}
+  .participant-item{padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; min-width:0;}
+  .participant-dot{width:9px; height:9px; border-radius:50%; background:var(--l4); flex-shrink:0;}
+  .participant-name{font-size:17px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .participant-dept{font-size:12px; color:#8FC7CC; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .participant-empty{padding:30px 20px; text-align:center; color:#7FA8AC;}
+  @media (max-width:900px){.participant-list{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  @media (max-width:600px){.wrap{padding:20px 16px 30px;}.participant-list{grid-template-columns:1fr;}.participant-name{font-size:16px;}.stat-row{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -185,6 +198,28 @@ async function joinDashboard(){
   subscribeDashboard();
 }
 
+function renderParticipantPanel(){
+  const sorted = [...students].sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'th'));
+  const rows = sorted.map(s=>`
+    <div class="participant-item">
+      <span class="participant-dot"></span>
+      <div style="min-width:0;">
+        <div class="participant-name">${s.name || 'ไม่ระบุชื่อ'}</div>
+        ${s.dept ? `<div class="participant-dept">${s.dept}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div class="participant-panel">
+      <div class="participant-head">
+        <div class="title">ผู้เข้าร่วมที่อยู่ในห้อง</div>
+        <div class="count">${students.length} คน</div>
+      </div>
+      ${rows ? `<div class="participant-list">${rows}</div>` : `<div class="participant-empty">ยังไม่มีผู้เข้าร่วม</div>`}
+    </div>
+  `;
+}
+
 async function renderDashboard(){
   if(!classroom) return;
   const mode = classroom.mode || 'lobby';
@@ -204,6 +239,7 @@ async function renderDashboard(){
     root.innerHTML = `<div class="wrap">${header}
       <div class="stat-row"><div class="stat-card" style="grid-column:1/-1;"><div class="num">${n}</div><div class="lab">ผู้เข้าร่วมทั้งหมด</div></div></div>
       <div class="statusband">รอผู้บรรยายเริ่มกิจกรรม<div class="sub">แชร์รหัส ${classroom.code} ให้ผู้เข้าร่วมกรอกเข้าห้องได้เลย</div></div>
+      ${renderParticipantPanel()}
     </div>`;
     return;
   }
@@ -211,6 +247,7 @@ async function renderDashboard(){
     root.innerHTML = `<div class="wrap">${header}
       <div class="stat-row"><div class="stat-card" style="grid-column:1/-1;"><div class="num">${n}</div><div class="lab">ผู้เข้าร่วมทั้งหมด</div></div></div>
       <div class="statusband">🎤 กำลังบรรยาย</div>
+      ${renderParticipantPanel()}
     </div>`;
     return;
   }
@@ -265,6 +302,7 @@ async function renderLeaderboard(header, n, phase, title){
         <div class="board-head"><div>อันดับ</div><div>ชื่อ</div><div style="text-align:right; padding-right:20px;">คะแนน</div><div style="text-align:right;">ความคืบหน้า</div></div>
         ${rows || `<div class="empty-row">ยังไม่มีผู้เริ่มทำ</div>`}
       </div>
+      ${renderParticipantPanel()}
     </div>
   `;
 }
