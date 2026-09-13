@@ -183,6 +183,25 @@ function csvEscape(v){ const s=(v===null||v===undefined)?'':String(v); return '"
 function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 let presenterAuthed = false;
+const PRESENTER_SESSION_KEY = 'erTriageSession_presenter_v2';
+
+function savePresenterSession(){
+  if(!uid || !currentClassroom?.id) return;
+  localStorage.setItem(PRESENTER_SESSION_KEY, JSON.stringify({version:2, role:'presenter', authUid:uid, classroomId:currentClassroom.id, view:'classroom-control', savedAt:Date.now()}));
+}
+function clearPresenterSession(){ localStorage.removeItem(PRESENTER_SESSION_KEY); }
+async function restorePresenterSession(){
+  try{
+    const raw = localStorage.getItem(PRESENTER_SESSION_KEY);
+    if(!raw) return false;
+    const saved = JSON.parse(raw);
+    if(saved?.role !== 'presenter' || saved?.version !== 2 || saved.authUid !== uid || !saved.classroomId) return false;
+    const snap = await getDoc(doc(db,'classrooms',saved.classroomId));
+    if(!snap.exists() || snap.data().presenterUid !== uid){ clearPresenterSession(); return false; }
+    await enterRoom(saved.classroomId);
+    return true;
+  }catch(e){ console.warn('Could not restore presenter session:', e); return false; }
+}
 
 // ---------- AUTH (Email/Password — คงที่ทุกเครื่อง ไม่ใช่ anonymous) ----------
 statusBadge.textContent = 'กำลังตรวจสอบล็อกอิน...';
@@ -192,7 +211,9 @@ setPersistence(auth, browserLocalPersistence).then(async ()=>{
     if(user){
       try{ await user.getIdToken(true); }catch(e){} // รีเฟรช token กันเคส token ค้างหลัง reload
       uid = user.uid; presenterAuthed = true;
-      statusBadge.textContent = user.email || 'PRESENTER'; view='classrooms'; render();
+      statusBadge.textContent = user.email || 'PRESENTER';
+      const restored = await restorePresenterSession();
+      if(!restored){ view='classrooms'; render(); }
     } else {
       presenterAuthed = false;
       renderLogin();
@@ -257,9 +278,10 @@ function bindNav(){
   document.getElementById('navClassrooms').addEventListener('click', ()=>{ leaveRoom(); view='classrooms'; render(); });
   document.getElementById('navBank').addEventListener('click', ()=>{ leaveRoom(); view='bank'; render(); });
 }
-function leaveRoom(){
+function leaveRoom(clearSaved=true){
   if(unsubRoom) unsubRoom(); if(unsubStudents) unsubStudents();
   unsubRoom=null; unsubStudents=null; currentClassroom=null; currentStudents=[];
+  if(clearSaved) clearPresenterSession();
 }
 
 async function getQuestion(topicId, qid){
@@ -465,7 +487,7 @@ async function createClassroom(){
 
 // ============ CLASSROOM CONTROL ============
 async function enterRoom(id){
-  leaveRoom();
+  leaveRoom(false);
   view = 'classroom-control';
   root.innerHTML = navBar() + `<div class="card"><div class="status-box">กำลังเชื่อมต่อห้อง...</div></div>`;
   bindNav();
@@ -473,6 +495,7 @@ async function enterRoom(id){
   unsubRoom = onSnapshot(doc(db,'classrooms',id), (snap)=>{
     if(!snap.exists()) return;
     currentClassroom = { id, ...snap.data() };
+    savePresenterSession();
     renderRoom();
   });
   unsubStudents = onSnapshot(collection(db,'classrooms',id,'students'), (snap)=>{

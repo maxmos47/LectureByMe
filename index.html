@@ -146,13 +146,82 @@ function genId(){ return 'p_' + Date.now().toString(36) + Math.random().toString
 
 function ctrlKeyUnused(){}
 
+const PARTICIPANT_SESSION_KEY = 'erTriageSession_participant_v2';
+
+function saveParticipantSession(){
+  if(!classroomId || !myStudentId || !uid) return;
+  localStorage.setItem(PARTICIPANT_SESSION_KEY, JSON.stringify({
+    version: 2, role: 'participant',
+    authUid: uid, classroomId, studentId: myStudentId,
+    name: myName, dept: document.getElementById('deptInput')?.value?.trim() || '',
+    savedAt: Date.now()
+  }));
+}
+
+function clearParticipantSession(){
+  localStorage.removeItem(PARTICIPANT_SESSION_KEY);
+}
+
+async function restoreParticipantSession(){
+  try{
+    const raw = localStorage.getItem(PARTICIPANT_SESSION_KEY);
+    if(!raw) return false;
+    const saved = JSON.parse(raw);
+    if(saved?.role !== 'participant' || saved?.version !== 2 || !saved.classroomId || !saved.studentId) return false;
+    if(saved.authUid && saved.authUid !== uid) return false;
+
+    const roomRef = doc(db, 'classrooms', saved.classroomId);
+    const studentRef = doc(db, 'classrooms', saved.classroomId, 'students', saved.studentId);
+    const [roomSnap, studentSnap] = await Promise.all([getDoc(roomRef), getDoc(studentRef)]);
+    if(!roomSnap.exists() || !studentSnap.exists()){ clearParticipantSession(); return false; }
+
+    const roomData = roomSnap.data();
+    const studentData = studentSnap.data();
+    classroomId = saved.classroomId;
+    myStudentId = saved.studentId;
+    className = roomData.name || '';
+    myName = studentData.name || saved.name || '';
+
+    myAnswers.pretestAnswers = studentData.pretestAnswers || {};
+    myAnswers.posttestAnswers = studentData.posttestAnswers || {};
+    preSubmitted = !!studentData.pretestSubmittedAt;
+    postSubmitted = !!studentData.posttestSubmittedAt;
+
+    localStorage.setItem(PARTICIPANT_SESSION_KEY, JSON.stringify({
+      ...saved, name: myName, dept: studentData.dept || saved.dept || '', savedAt: Date.now()
+    }));
+
+    roleBadge.style.display = 'inline-block';
+    roleBadge.textContent = myName + ' · ' + className;
+    if(unsubRoom) unsubRoom();
+    unsubRoom = onSnapshot(roomRef, (snap)=>{
+      if(!snap.exists()){ clearParticipantSession(); return; }
+      classroom = { id:classroomId, ...snap.data() };
+      renderParticipant();
+    });
+    return true;
+  }catch(e){
+    console.warn('Could not restore participant session:', e);
+    return false;
+  }
+}
+
 setPersistence(auth, browserLocalPersistence).then(()=>{
-  onAuthStateChanged(auth, (user)=>{
-    if(user){ uid = user.uid; renderJoin(); }
+  onAuthStateChanged(auth, async (user)=>{
+    if(!user) return;
+    uid = user.uid;
+
+    // Firebase anonymous auth ถูก persist อยู่แล้ว แต่ข้อมูลการเข้าห้อง
+    // (classroom + participant) ต้อง restore แยกจาก Auth session
+    const restored = await restoreParticipantSession();
+    if(!restored) renderJoin();
   });
+
   signInAnonymously(auth).catch(err=>{
     root.innerHTML = `<div class="card"><div class="status-box">เข้าสู่ระบบไม่สำเร็จ: ${err.message}</div></div>`;
   });
+}).catch(err=>{
+  root.innerHTML = `<div class="card"><div class="status-box">เตรียมระบบไม่สำเร็จ: ${err.message}</div></div>`;
 });
 
 async function getQuestion(topicId, qid){
@@ -208,16 +277,14 @@ async function doJoin(){
   className = roomDoc.data().name;
   myName = name;
 
-  // ค้นหาว่าเคยเข้าร่วมด้วยชื่อนี้ในห้องนี้มาก่อนไหม (กันรายชื่อซ้ำเวลารีเฟรช/เข้าซ้ำ)
-  let existingData = null;
-  try{
-    const existingQ = query(collection(db,'classrooms',classroomId,'students'), where('name','==',name));
-    const existingSnap = await getDocs(existingQ);
-    if(!existingSnap.empty){ myStudentId = existingSnap.docs[0].id; existingData = existingSnap.docs[0].data(); }
-  }catch(e){}
-  if(!myStudentId) myStudentId = uid;
+  // Identity ของ participant ผูกกับ Firebase Anonymous UID ไม่ใช่ชื่อ
+  // ชื่อซ้ำกันจึงไม่สามารถทำให้ผู้เข้าร่วมสองคนใช้ record เดียวกันได้
+  myStudentId = uid;
+  const studentRef = doc(db,'classrooms',classroomId,'students',myStudentId);
+  const existingSnap = await getDoc(studentRef);
+  const existingData = existingSnap.exists() ? existingSnap.data() : null;
 
-  await setDoc(doc(db,'classrooms',classroomId,'students',myStudentId), {
+  await setDoc(studentRef, {
     name, dept,
     joinedAt: existingData?.joinedAt || new Date().toISOString(),
     pretestAnswers: existingData?.pretestAnswers || {},
@@ -226,7 +293,9 @@ async function doJoin(){
     ...(existingData?.posttestSubmittedAt ? { posttestSubmittedAt: existingData.posttestSubmittedAt } : {})
   });
 
-  // กู้สถานะกลับมาให้ตรงกับที่เคยทำไว้ (ถ้าเคยส่งคำตอบไปแล้วจะไม่ให้ทำซ้ำ)
+  // เก็บ session สำหรับ restore หลัง refresh / ปิดแท็บ / เปิดหน้าใหม่
+  saveParticipantSession();
+
   myAnswers.pretestAnswers = existingData?.pretestAnswers || {};
   myAnswers.posttestAnswers = existingData?.posttestAnswers || {};
   preSubmitted = !!existingData?.pretestSubmittedAt;
@@ -317,10 +386,10 @@ async function renderTest(phase){
       <div class="nav-row">
         <button class="ghost" id="prevBtn" style="flex:1;" ${idx===0?'disabled':''}>ย้อนกลับ</button>
         ${isLast
-          ? `<button class="primary" id="submitBtn" style="flex:1;">ส่งคำตอบ (Submit)</button>`
+          ? `<button class="primary" id="submitBtn" style="flex:1;" ${answeredCount < ids.length ? 'disabled' : ''}>${answeredCount < ids.length ? `ตอบให้ครบก่อนส่ง (${answeredCount}/${ids.length})` : 'ส่งคำตอบ (Submit)'}</button>`
           : `<button class="primary" id="nextBtn" style="flex:1;">ข้อถัดไป</button>`}
       </div>
-      ${!isLast ? `<button class="linkbtn" id="earlySubmitBtn">ส่งคำตอบตอนนี้เลย (ยังไม่ต้องรอทำครบ)</button>` : ''}
+      ${isLast && answeredCount < ids.length ? `<div class="small-muted" style="margin-top:10px; text-align:center;">กรุณาตอบให้ครบทุกข้อก่อนจึงจะส่งข้อสอบได้</div>` : ''}
     </div>
   ` + bottomLink();
 
@@ -329,8 +398,15 @@ async function renderTest(phase){
     const div = document.createElement('div');
     div.className = 'option' + (currentAnswer===oIdx ? ' selected' : '');
     div.innerHTML = `<span class="dot"></span>${swatch(oIdx)}<span>${opt}</span>`;
-    div.addEventListener('click', ()=>{
+    div.addEventListener('click', async ()=>{
       myAnswers[field][qid] = oIdx;
+      // บันทึกคำตอบทันที เพื่อป้องกันคำตอบหายเมื่อ refresh / network reconnect
+      try{
+        await updateDoc(doc(db,'classrooms',classroomId,'students',myStudentId), { [field]: myAnswers[field] });
+        saveParticipantSession();
+      }catch(e){
+        console.warn('Could not save answer:', e);
+      }
       renderTest(phase);
     });
     wrap.appendChild(div);
@@ -341,13 +417,13 @@ async function renderTest(phase){
     renderTest(phase);
   });
   if(isLast){
-    document.getElementById('submitBtn').addEventListener('click', ()=>submitTest(phase));
+    const submitBtn = document.getElementById('submitBtn');
+    if(submitBtn) submitBtn.addEventListener('click', ()=>submitTest(phase));
   } else {
     document.getElementById('nextBtn').addEventListener('click', ()=>{
       if(phase==='pretest') preIdx = Math.min(ids.length-1, idx+1); else postIdx = Math.min(ids.length-1, idx+1);
       renderTest(phase);
     });
-    document.getElementById('earlySubmitBtn').addEventListener('click', ()=>submitTest(phase));
   }
   bindBottomLink();
 }
@@ -355,6 +431,12 @@ async function renderTest(phase){
 async function submitTest(phase){
   const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
   const stampField = phase==='pretest' ? 'pretestSubmittedAt' : 'posttestSubmittedAt';
+  const ids = phase==='pretest' ? (classroom.pretestQuestionIds || []) : (classroom.posttestQuestionIds || []);
+  const answered = Object.keys(myAnswers[field] || {}).filter(qid => ids.includes(qid)).length;
+  if(answered < ids.length){
+    alert(`กรุณาตอบให้ครบทุกข้อก่อนส่ง (${answered}/${ids.length})`);
+    return;
+  }
   try{
     await updateDoc(doc(db,'classrooms',classroomId,'students',myStudentId), {
       [field]: myAnswers[field],
@@ -362,6 +444,7 @@ async function submitTest(phase){
     });
   }catch(e){}
   if(phase==='pretest') preSubmitted = true; else postSubmitted = true;
+  saveParticipantSession();
   renderTest(phase);
 }
 

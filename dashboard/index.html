@@ -94,6 +94,38 @@ const root = document.getElementById('root');
 let classroomId = null, classroom = null, students = [];
 let questionCache = {};
 let unsubRoom = null, unsubStudents = null;
+const DASHBOARD_SESSION_KEY = 'erTriageSession_dashboard_v2';
+function saveDashboardSession(){
+  if(!classroomId || !classroom?.code) return;
+  localStorage.setItem(DASHBOARD_SESSION_KEY, JSON.stringify({version:2, role:'dashboard', classroomId, code:classroom.code, savedAt:Date.now()}));
+}
+function clearDashboardSession(){ localStorage.removeItem(DASHBOARD_SESSION_KEY); }
+async function restoreDashboardSession(){
+  try{
+    const raw = localStorage.getItem(DASHBOARD_SESSION_KEY);
+    if(!raw) return false;
+    const saved = JSON.parse(raw);
+    if(saved?.role !== 'dashboard' || saved?.version !== 2 || !saved.classroomId) return false;
+    const snap = await getDoc(doc(db,'classrooms',saved.classroomId));
+    if(!snap.exists()){ clearDashboardSession(); return false; }
+    classroomId = saved.classroomId;
+    subscribeDashboard();
+    return true;
+  }catch(e){ console.warn('Could not restore dashboard session:', e); return false; }
+}
+function subscribeDashboard(){
+  if(unsubRoom) unsubRoom(); if(unsubStudents) unsubStudents();
+  unsubRoom = onSnapshot(doc(db,'classrooms',classroomId), (s)=>{
+    if(!s.exists()){ clearDashboardSession(); classroom=null; renderEntry(); return; }
+    classroom = { id:classroomId, ...s.data() };
+    saveDashboardSession();
+    renderDashboard();
+  });
+  unsubStudents = onSnapshot(collection(db,'classrooms',classroomId,'students'), (s)=>{
+    students = []; s.forEach(d=>students.push({ id:d.id, ...d.data() }));
+    renderDashboard();
+  });
+}
 
 async function getQuestion(topicId, qid){
   if(questionCache[qid]) return questionCache[qid];
@@ -118,8 +150,8 @@ function scoreStudent(s, phase, ids){
   return { correct, answered };
 }
 
-setPersistence(auth, browserLocalPersistence).then(()=>{
-  onAuthStateChanged(auth, (user)=>{ if(user) renderEntry(); });
+setPersistence(auth, browserLocalPersistence).then(async ()=>{
+  onAuthStateChanged(auth, async (user)=>{ if(user){ const restored = await restoreDashboardSession(); if(!restored) renderEntry(); } });
   signInAnonymously(auth).catch(err=>{
     root.innerHTML = `<div class="entry-wrap"><div class="entry-card"><h1>เชื่อมต่อไม่สำเร็จ: ${err.message}</h1></div></div>`;
   });
@@ -149,16 +181,8 @@ async function joinDashboard(){
   const snap = await getDocs(query(collection(db,'classrooms'), where('code','==',code)));
   if(snap.empty){ err.textContent='ไม่พบ Classroom นี้'; err.style.display='block'; return; }
   classroomId = snap.docs[0].id;
-
-  unsubRoom = onSnapshot(doc(db,'classrooms',classroomId), (s)=>{
-    if(!s.exists()) return;
-    classroom = { id:classroomId, ...s.data() };
-    renderDashboard();
-  });
-  unsubStudents = onSnapshot(collection(db,'classrooms',classroomId,'students'), (s)=>{
-    students = []; s.forEach(d=>students.push({ id:d.id, ...d.data() }));
-    renderDashboard();
-  });
+  saveDashboardSession();
+  subscribeDashboard();
 }
 
 async function renderDashboard(){
