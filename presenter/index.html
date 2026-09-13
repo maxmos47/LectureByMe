@@ -627,6 +627,11 @@ function modeControlHtml(){
         <div class="small-muted" style="margin-top:10px;">จบการนำเสนอแล้ว ผู้ฟังเห็นหน้าขอบคุณ + คะแนนของตัวเอง</div>
       `}
     </div>
+    <div class="card">
+      <label style="margin-bottom:8px; color:var(--l1);">โซนอันตราย</label>
+      <p class="lead" style="margin-bottom:12px;">ใช้เมื่อจะเริ่มรอบใหม่กับกลุ่มผู้เรียนกลุ่มใหม่ในห้องเดิม (รหัส "${currentClassroom.code}" ใช้ต่อได้เลย ไม่ต้องสร้างห้องใหม่)</p>
+      <button class="danger" id="resetRoomBtn" style="width:100%;">รีเซ็ต Classroom (เริ่มรอบใหม่)</button>
+    </div>
   `;
 }
 function bindModeControl(){
@@ -641,6 +646,35 @@ function bindModeControl(){
         updateRoom({ mode:'ended' });
       }
     });
+  }
+  const resetBtn = document.getElementById('resetRoomBtn');
+  if(resetBtn) resetBtn.addEventListener('click', resetClassroom);
+}
+
+async function resetClassroom(){
+  const n = currentStudents.length;
+  const confirmed = confirm(
+    `ยืนยันรีเซ็ต Classroom "${currentClassroom.name}"?\n\n` +
+    `จะลบผู้เข้าร่วมทั้งหมด (${n} คน) และคำตอบทุกข้อออกจากห้องนี้ถาวร ห้องจะกลับไปที่สถานะ "รอเริ่มกิจกรรม" ` +
+    `แต่รหัสห้อง "${currentClassroom.code}" และชุดคำถามที่ตั้งไว้ยังใช้ต่อได้เหมือนเดิม\n\n` +
+    `การกระทำนี้ย้อนกลับไม่ได้`
+  );
+  if(!confirmed) return;
+
+  const btn = document.getElementById('resetRoomBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังรีเซ็ต...'; }
+
+  try{
+    const snap = await getDocs(collection(db,'classrooms',currentClassroom.id,'students'));
+    if(!snap.empty){
+      const batch = writeBatch(db);
+      snap.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await updateRoom({ mode:'lobby' });
+  }catch(e){
+    alert('รีเซ็ตไม่สำเร็จ: ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'รีเซ็ต Classroom (เริ่มรอบใหม่)'; }
   }
 }
 
