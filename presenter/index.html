@@ -33,7 +33,8 @@
     flex-shrink:0; box-shadow:var(--shadow-sm);}
   .brand .mark{font-size:11px; color:var(--teal); font-weight:700; letter-spacing:.04em;}
   .brand h1{font-size:17px; margin:1px 0 0; font-weight:700; color:var(--teal-deep); line-height:1.2;}
-  .badge{font-size:11.5px; padding:5px 11px; border-radius:20px; background:var(--teal); color:#fff; font-weight:600; white-space:nowrap;}
+  .badge{font-size:11.5px; padding:5px 11px; border-radius:20px; background:var(--teal); color:#fff; font-weight:600;
+    white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis; display:inline-block; vertical-align:middle;}
 
   .navrow{display:flex; gap:6px; margin-bottom:16px; background:var(--paper); padding:4px; border-radius:var(--radius-md); border:1px solid var(--line);}
   .navrow button{flex:1; border:none; background:transparent; color:var(--ink); min-height:42px;
@@ -184,11 +185,14 @@ function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=
 let presenterAuthed = false;
 
 // ---------- AUTH (Email/Password — คงที่ทุกเครื่อง ไม่ใช่ anonymous) ----------
-setPersistence(auth, browserLocalPersistence).then(()=>{
-  onAuthStateChanged(auth, (user)=>{
+statusBadge.textContent = 'กำลังตรวจสอบล็อกอิน...';
+setPersistence(auth, browserLocalPersistence).then(async ()=>{
+  await auth.authStateReady(); // รอให้ Firebase กู้ session เดิมจาก browser storage ก่อนเช็คสถานะ
+  onAuthStateChanged(auth, async (user)=>{
     if(user){
+      try{ await user.getIdToken(true); }catch(e){} // รีเฟรช token กันเคส token ค้างหลัง reload
       uid = user.uid; presenterAuthed = true;
-      statusBadge.textContent = 'PRESENTER'; view='classrooms'; render();
+      statusBadge.textContent = user.email || 'PRESENTER'; view='classrooms'; render();
     } else {
       presenterAuthed = false;
       renderLogin();
@@ -275,19 +279,20 @@ async function renderClassroomsList(){
   root.innerHTML = navBar() + `<div class="card"><div class="status-box">กำลังโหลด...</div></div>`;
   bindNav();
   let rooms = [];
+  let loadError = null;
   try{
     const q = query(collection(db,'classrooms'), where('presenterUid','==',uid));
     const snap = await getDocs(q);
     snap.forEach(d=> rooms.push({id:d.id, ...d.data()}));
     rooms.sort((a,b)=> (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
-  }catch(e){}
+  }catch(e){ loadError = e.message; }
 
   let roomsHtml = rooms.length ? rooms.map(r=>`
     <div class="roomrow">
       <div><div class="rname">${r.name}</div><div class="rmeta">รหัส ${r.code}</div></div>
       <button class="ghost small" data-id="${r.id}">เข้าควบคุม</button>
     </div>
-  `).join('') : `<div class="small-muted">ยังไม่เคยสร้าง Classroom</div>`;
+  `).join('') : (loadError ? `<div class="errtag">โหลดไม่สำเร็จ: ${loadError}</div>` : `<div class="small-muted">ยังไม่เคยสร้าง Classroom</div>`);
 
   root.innerHTML = navBar() + `
     <div class="card">
@@ -562,16 +567,17 @@ function resultsTabsHtml(){
         ${tab('pretest','คะแนนสด · Pretest')}
         ${tab('posttest','คะแนนสด · Post-test')}
         ${tab('compare','เปรียบเทียบ Pre/Post')}
+        ${tab('participants','ผู้เข้าร่วม')}
       </div>
       <div id="resultsContent"><div class="status-box">กำลังโหลด...</div></div>
     </div>
   `;
 }
 function bindResultsTabs(){
-  ['pretest','posttest','compare'].forEach(key=>{
+  ['pretest','posttest','compare','participants'].forEach(key=>{
     document.getElementById('tab_'+key).addEventListener('click', ()=>{
       resultsTab = key;
-      ['pretest','posttest','compare'].forEach(k=>{
+      ['pretest','posttest','compare','participants'].forEach(k=>{
         document.getElementById('tab_'+k).classList.toggle('active', k===key);
       });
       renderResultsContent();
@@ -700,7 +706,40 @@ async function renderCompare(){
 
 async function renderResultsContent(){
   if(resultsTab === 'compare') await renderCompare();
+  else if(resultsTab === 'participants') renderParticipantsList();
   else await renderLiveLeaderboard(resultsTab);
+}
+
+function renderParticipantsList(){
+  const wrap = document.getElementById('resultsContent');
+  const sorted = [...currentStudents].sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'th'));
+  const rows = sorted.map(s=>`
+    <div class="roomrow">
+      <div>
+        <div class="rname">${s.name}${s.dept ? ' · '+s.dept : ''}</div>
+        <div class="rmeta">
+          ${s.pretestSubmittedAt ? 'ส่ง Pretest แล้ว' : 'ยังไม่ส่ง Pretest'} ·
+          ${s.posttestSubmittedAt ? 'ส่ง Post-test แล้ว' : 'ยังไม่ส่ง Post-test'}
+        </div>
+      </div>
+      <button class="ghost small" data-kick="${s.id}" style="border-color:var(--l1); color:var(--l1);">ลบ</button>
+    </div>
+  `).join('');
+
+  wrap.innerHTML = `
+    <div style="margin-top:12px;">
+      <div class="small-muted" style="text-align:left; margin-top:0;">ผู้เข้าร่วมทั้งหมด ${currentStudents.length} คน — ลบเพื่อเตะออกจากห้อง (ถ้าจะกลับเข้ามาใหม่ต้องกรอกรหัส+ชื่ออีกครั้ง)</div>
+      <div style="max-height:400px; overflow-y:auto; margin-top:8px;">
+        ${rows || '<div class="small-muted">ยังไม่มีผู้เข้าร่วม</div>'}
+      </div>
+    </div>
+  `;
+  wrap.querySelectorAll('[data-kick]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('ยืนยันลบผู้เข้าร่วมคนนี้ออกจาก Classroom? คำตอบของเขาจะหายไปด้วย')) return;
+      await deleteDoc(doc(db,'classrooms',currentClassroom.id,'students',btn.dataset.kick));
+    });
+  });
 }
 
 async function renderRoom(){

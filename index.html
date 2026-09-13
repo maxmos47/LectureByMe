@@ -128,6 +128,7 @@ const titleText = document.getElementById('titleText');
 const roleBadge = document.getElementById('roleBadge');
 
 let uid = null;
+let myStudentId = null;
 let classroomId = null;
 let className = '';
 let myName = '';
@@ -207,10 +208,29 @@ async function doJoin(){
   className = roomDoc.data().name;
   myName = name;
 
-  await setDoc(doc(db,'classrooms',classroomId,'students',uid), {
-    name, dept, joinedAt: new Date().toISOString(),
-    pretestAnswers: {}, posttestAnswers: {}
+  // ค้นหาว่าเคยเข้าร่วมด้วยชื่อนี้ในห้องนี้มาก่อนไหม (กันรายชื่อซ้ำเวลารีเฟรช/เข้าซ้ำ)
+  let existingData = null;
+  try{
+    const existingQ = query(collection(db,'classrooms',classroomId,'students'), where('name','==',name));
+    const existingSnap = await getDocs(existingQ);
+    if(!existingSnap.empty){ myStudentId = existingSnap.docs[0].id; existingData = existingSnap.docs[0].data(); }
+  }catch(e){}
+  if(!myStudentId) myStudentId = uid;
+
+  await setDoc(doc(db,'classrooms',classroomId,'students',myStudentId), {
+    name, dept,
+    joinedAt: existingData?.joinedAt || new Date().toISOString(),
+    pretestAnswers: existingData?.pretestAnswers || {},
+    posttestAnswers: existingData?.posttestAnswers || {},
+    ...(existingData?.pretestSubmittedAt ? { pretestSubmittedAt: existingData.pretestSubmittedAt } : {}),
+    ...(existingData?.posttestSubmittedAt ? { posttestSubmittedAt: existingData.posttestSubmittedAt } : {})
   });
+
+  // กู้สถานะกลับมาให้ตรงกับที่เคยทำไว้ (ถ้าเคยส่งคำตอบไปแล้วจะไม่ให้ทำซ้ำ)
+  myAnswers.pretestAnswers = existingData?.pretestAnswers || {};
+  myAnswers.posttestAnswers = existingData?.posttestAnswers || {};
+  preSubmitted = !!existingData?.pretestSubmittedAt;
+  postSubmitted = !!existingData?.posttestSubmittedAt;
 
   roleBadge.style.display = 'inline-block';
   roleBadge.textContent = myName + ' · ' + className;
@@ -336,7 +356,7 @@ async function submitTest(phase){
   const field = phase==='pretest' ? 'pretestAnswers' : 'posttestAnswers';
   const stampField = phase==='pretest' ? 'pretestSubmittedAt' : 'posttestSubmittedAt';
   try{
-    await updateDoc(doc(db,'classrooms',classroomId,'students',uid), {
+    await updateDoc(doc(db,'classrooms',classroomId,'students',myStudentId), {
       [field]: myAnswers[field],
       [stampField]: new Date().toISOString()
     });
