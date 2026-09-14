@@ -73,6 +73,10 @@
     padding:12px 16px; font-size:14px; cursor:pointer; min-height:46px; font-weight:600; transition:transform .08s, background .15s;}
   button.ghost:active{transform:scale(.98); background:var(--teal-soft);}
   button.small{padding:7px 12px; font-size:12.5px; border-radius:20px; min-height:auto;}
+  .inline-edit-actions{display:flex;gap:8px;align-items:stretch;margin-top:10px;}
+  .inline-edit-actions button{width:auto;flex:1;min-height:46px;}
+  .inline-edit-actions button.ghost{flex:0 0 auto;min-width:92px;padding:10px 16px;}
+  @media (max-width:520px){.inline-edit-actions{gap:7px}.inline-edit-actions button.ghost{min-width:84px;padding:10px 13px}}
   button.danger{background:var(--l1); color:#fff; border:none; border-radius:var(--radius-sm); padding:12px 16px;
     font-size:14px; cursor:pointer; min-height:46px; font-weight:600; transition:transform .08s, background .15s;}
   button.danger:active{transform:scale(.98);}
@@ -967,7 +971,12 @@ async function renderEditQuestionSet(){
     const qs=await fetchQuestions(editSetState.pretestTopicId); const el=document.getElementById('esPreQuestionList');
     el.innerHTML=qs.map(q=>`<div class="qcheckrow ${editSetState.pretestSelected.includes(q.id)?'checked':''}" data-qid="${q.id}"><input type="checkbox" ${editSetState.pretestSelected.includes(q.id)?'checked':''} ${preLocked?'disabled':''}><div>${q.case}<br><span style="color:#6B7674;font-size:12px;">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</span></div></div>`).join('')||'<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
     if(preLocked) return;
-    el.querySelectorAll('.qcheckrow').forEach(row=>row.addEventListener('click',()=>{const cb=row.querySelector('input');cb.checked=!cb.checked;row.classList.toggle('checked',cb.checked);const qid=row.dataset.qid;if(cb.checked&&!editSetState.pretestSelected.includes(qid))editSetState.pretestSelected.push(qid);else editSetState.pretestSelected=editSetState.pretestSelected.filter(x=>x!==qid);}));
+    el.querySelectorAll('.qcheckrow').forEach(row=>{
+      const cb=row.querySelector('input[type=checkbox]');
+      const sync=()=>{ const qid=row.dataset.qid; row.classList.toggle('checked',cb.checked); if(cb.checked&&!editSetState.pretestSelected.includes(qid)) editSetState.pretestSelected.push(qid); else if(!cb.checked) editSetState.pretestSelected=editSetState.pretestSelected.filter(x=>x!==qid); };
+      cb.addEventListener('change',sync);
+      row.addEventListener('click',e=>{ if(e.target===cb) return; cb.checked=!cb.checked; sync(); });
+    });
   }
   async function loadPostQuestionList(){
     const el=document.getElementById('esPostManualList');
@@ -975,13 +984,18 @@ async function renderEditQuestionSet(){
     const qs=await fetchQuestions(editSetState.posttestTopicId);
     el.innerHTML=qs.map(q=>`<div class="qcheckrow ${editSetState.posttestSelected.includes(q.id)?'checked':''}" data-qid="${q.id}"><input type="checkbox" ${editSetState.posttestSelected.includes(q.id)?'checked':''} ${postLocked?'disabled':''}><div>${q.case}<br><span style="color:#6B7674;font-size:12px;">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}</span></div></div>`).join('')||'<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
     if(postLocked) return;
-    el.querySelectorAll('.qcheckrow').forEach(row=>row.addEventListener('click',()=>{const cb=row.querySelector('input');cb.checked=!cb.checked;row.classList.toggle('checked',cb.checked);const qid=row.dataset.qid;if(cb.checked&&!editSetState.posttestSelected.includes(qid))editSetState.posttestSelected.push(qid);else editSetState.posttestSelected=editSetState.posttestSelected.filter(x=>x!==qid);}));
+    el.querySelectorAll('.qcheckrow').forEach(row=>{
+      const cb=row.querySelector('input[type=checkbox]');
+      const sync=()=>{ const qid=row.dataset.qid; row.classList.toggle('checked',cb.checked); if(cb.checked&&!editSetState.posttestSelected.includes(qid)) editSetState.posttestSelected.push(qid); else if(!cb.checked) editSetState.posttestSelected=editSetState.posttestSelected.filter(x=>x!==qid); };
+      cb.addEventListener('change',sync);
+      row.addEventListener('click',e=>{ if(e.target===cb) return; cb.checked=!cb.checked; sync(); });
+    });
   }
   if(editSetState.pretestTopicId) await loadPreQuestionList();
   if(editSetState.posttestTopicId){ const qs=await fetchQuestions(editSetState.posttestTopicId); document.getElementById('esPostAvailHint').textContent=`มีในคลัง ${qs.length} ข้อ`; }
   await loadPostQuestionList();
 
-  if(!preLocked) wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(p=>p.addEventListener('click',async()=>{wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(x=>x.classList.remove('active'));p.classList.add('active');editSetState.pretestTopicId=p.dataset.id;editSetState.pretestSelected=[];await loadPreQuestionList();}));
+  if(!preLocked) wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(p=>p.addEventListener('click',async()=>{wrap.querySelectorAll('#esPreTopicPills .topicpill').forEach(x=>x.classList.remove('active'));p.classList.add('active');editSetState.pretestTopicId=p.dataset.id;await loadPreQuestionList();}));
   if(!postLocked) wrap.querySelectorAll('#esPostTopicPills .topicpill').forEach(p=>p.addEventListener('click',async()=>{wrap.querySelectorAll('#esPostTopicPills .topicpill').forEach(x=>x.classList.remove('active'));p.classList.add('active');editSetState.posttestTopicId=p.dataset.id;editSetState.posttestSelected=[];const qs=await fetchQuestions(p.dataset.id);document.getElementById('esPostAvailHint').textContent=`มีในคลัง ${qs.length} ข้อ`;await loadPostQuestionList();}));
   if(!postLocked) wrap.querySelectorAll('#esPostModeToggle button').forEach(b=>b.addEventListener('click',async()=>{editSetState.posttestMode=b.dataset.mode;wrap.querySelectorAll('#esPostModeToggle button').forEach(x=>x.classList.toggle('active',x.dataset.mode===editSetState.posttestMode));document.getElementById('esPostCountWrap').style.display=editSetState.posttestMode==='random'?'block':'none';document.getElementById('esSavePostBtn').textContent=editSetState.posttestMode==='manual'?'บันทึกชุด Post-test':'สุ่มใหม่และบันทึกชุด Post-test';await loadPostQuestionList();}));
   if(!postLocked) document.getElementById('esPostCount').addEventListener('input',e=>editSetState.posttestCount=parseInt(e.target.value||'0',10));
@@ -990,7 +1004,9 @@ async function renderEditQuestionSet(){
     if(preLocked) return;
     if(!editSetState.pretestTopicId||!editSetState.pretestSelected.length){alert('กรุณาเลือกหัวข้อและอย่างน้อย 1 ข้อสำหรับ Pretest');return;}
     const btn=document.getElementById('esSavePreBtn');btn.disabled=true;btn.textContent='กำลังบันทึก...';
-    await updateRoom({pretestTopicId:editSetState.pretestTopicId,pretestQuestionIds:[...editSetState.pretestSelected]});
+    const savedPreIds=[...editSetState.pretestSelected];
+    await updateRoom({pretestTopicId:editSetState.pretestTopicId,pretestQuestionIds:savedPreIds});
+    editSetState.pretestSelected=[...savedPreIds];
     btn.disabled=false;btn.textContent='บันทึกชุด Pretest';showToast('บันทึกชุด Pretest แล้ว ✓');
   });
   document.getElementById('esSavePostBtn').addEventListener('click',async()=>{
@@ -1185,83 +1201,138 @@ async function renderTopicDetail(){
   const topicName = bankTopics.find(t=>t.id===selectedTopicId)?.name || '';
   const editingQ = editingQuestionId ? questions.find(q=>q.id===editingQuestionId) : null;
 
-  let qRows = questions.map(q=>`
-    <div class="bank-qrow">
-      <div style="max-width:66%;">
-        <div class="bank-qtext">${q.case}</div>
-        <div class="bank-qmeta">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}${q.explanation?' · มีคำอธิบาย':''}</div>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button class="ghost small" data-edit="${q.id}">แก้ไข</button>
-        <button class="ghost small" data-del="${q.id}" style="border-color:var(--l1); color:var(--l1);">ลบ</button>
-      </div>
-    </div>
-  `).join('') || '<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
-
-  const formCase = editingQ ? editingQ.case : '';
-  const formOptions = editingQ ? (editingQ.options || OPTIONS_DEFAULT) : OPTIONS_DEFAULT;
-  const formCorrect = editingQ ? editingQ.correct : 0;
-  const formExplanation = editingQ ? (editingQ.explanation || '') : '';
+  // Edit happens IN the same question row. This keeps the editor next to the
+  // question being edited instead of forcing the presenter to scroll to a form below.
+  const questionRows = questions.map(q=>{
+    if(editingQuestionId === q.id){
+      const opts = q.options || OPTIONS_DEFAULT;
+      return `
+        <div class="bank-qrow bank-qrow-editing" data-question-row="${q.id}">
+          <div style="width:100%;">
+            <div class="bank-qmeta" style="margin-bottom:8px; color:var(--teal-deep); font-weight:700;">✏️ กำลังแก้ไขข้อ ${questions.indexOf(q)+1}</div>
+            <label for="inlineQCase_${q.id}">เคส (Case)</label>
+            <textarea id="inlineQCase_${q.id}" class="inline-qcase">${q.case || ''}</textarea>
+            <label>ตัวเลือกและเฉลย</label>
+            <div class="opt5 inline-opt-wrap">
+              ${opts.map((o,i)=>`
+                <div class="orow">
+                  <input type="radio" name="inlineCorrectOpt" value="${i}" ${i===q.correct?'checked':''}>
+                  <span class="oswatch" style="background:${LEVEL_COLORS[i]}"></span>
+                  <input type="text" class="optInput inline-opt" value="${o}" style="flex:1;">
+                </div>
+              `).join('')}
+            </div>
+            <label for="inlineQExplanation_${q.id}">คำอธิบาย / Teaching point</label>
+            <textarea id="inlineQExplanation_${q.id}" class="inline-qexplanation" placeholder="อธิบายเหตุผลของเฉลยหรือจุดสอนสำคัญ">${q.explanation || ''}</textarea>
+            <div class="inline-edit-actions">
+              <button class="primary" id="saveInlineQBtn">บันทึกการแก้ไข</button>
+              <button class="ghost" id="cancelInlineQBtn">ยกเลิก</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="bank-qrow" data-question-row="${q.id}">
+        <div style="max-width:66%; min-width:0;">
+          <div class="bank-qtext">${q.case}</div>
+          <div class="bank-qmeta">เฉลย: ${(q.options||OPTIONS_DEFAULT)[q.correct]}${q.explanation?' · มีคำอธิบาย':''}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <button class="ghost small" data-edit="${q.id}">แก้ไข</button>
+          <button class="ghost small" data-del="${q.id}" style="border-color:var(--l1); color:var(--l1);">ลบ</button>
+        </div>
+      </div>`;
+  }).join('') || '<div class="small-muted">หัวข้อนี้ยังไม่มีคำถาม</div>';
 
   wrap.innerHTML = `
     <div class="card">
-      <label style="margin-bottom:8px;">คำถามในหัวข้อ "${topicName}" (${questions.length} ข้อ)</label>
-      ${qRows}
+      <div class="section-head">
+        <div><label style="margin-bottom:2px;">คำถามในหัวข้อ "${topicName}"</label><div class="section-sub">${questions.length} ข้อ · กดแก้ไขเพื่อแก้ในตำแหน่งเดิม</div></div>
+      </div>
+      ${questionRows}
     </div>
     <div class="card">
-      <label style="margin-bottom:10px;">${editingQ ? 'แก้ไขคำถาม' : 'เพิ่มคำถามใหม่ในหัวข้อนี้'}</label>
+      <label style="margin-bottom:10px;">เพิ่มคำถามใหม่ในหัวข้อนี้</label>
       <label for="qCase">เคส (Case)</label>
-      <textarea id="qCase" placeholder="เช่น ชาย 65 ปี เจ็บแน่นหน้าอก...">${formCase}</textarea>
+      <textarea id="qCase" placeholder="เช่น ชาย 65 ปี เจ็บแน่นหน้าอก...">${editingQ ? '' : ''}</textarea>
       <label>ตัวเลือกและเฉลย</label>
       <div class="opt5" id="optWrap">
-        ${formOptions.map((o,i)=>`
+        ${OPTIONS_DEFAULT.map((o,i)=>`
           <div class="orow">
-            <input type="radio" name="correctOpt" value="${i}" ${i===formCorrect?'checked':''}>
+            <input type="radio" name="newCorrectOpt" value="${i}" ${i===0?'checked':''}>
             <span class="oswatch" style="background:${LEVEL_COLORS[i]}"></span>
             <input type="text" class="optInput" value="${o}" style="flex:1;">
           </div>
         `).join('')}
       </div>
       <label for="qExplanation">คำอธิบาย / Teaching point (ถ้ามี)</label>
-      <textarea id="qExplanation" placeholder="อธิบายเหตุผลของเฉลยหรือจุดสอนสำคัญ">${formExplanation}</textarea>
-      <button class="primary" id="addQBtn">${editingQ ? 'บันทึกการแก้ไข' : 'บันทึกคำถาม'}</button>
-      ${editingQ ? `<button class="ghost" id="cancelEditBtn" style="width:100%; margin-top:10px;">ยกเลิกการแก้ไข</button>` : ''}
+      <textarea id="qExplanation" placeholder="อธิบายเหตุผลของเฉลยหรือจุดสอนสำคัญ"></textarea>
+      <button class="primary" id="addQBtn">บันทึกคำถามใหม่</button>
     </div>
   `;
 
   wrap.querySelectorAll('[data-del]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
+      if(!confirm('ยืนยันลบคำถามนี้?')) return;
       await deleteDoc(doc(db,'question_bank',selectedTopicId,'questions',btn.dataset.del));
       if(editingQuestionId === btn.dataset.del) editingQuestionId = null;
-      renderTopicDetail();
+      await renderTopicDetail();
     });
   });
+
   wrap.querySelectorAll('[data-edit]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
       editingQuestionId = btn.dataset.edit;
-      renderTopicDetail();
-      wrap.scrollIntoView({ behavior:'smooth', block:'end' });
+      await renderTopicDetail();
+      // Keep the edited row in view, not the bottom editor.
+      const row = wrap.querySelector(`[data-question-row="${editingQuestionId}"]`);
+      if(row) row.scrollIntoView({behavior:'smooth', block:'center'});
     });
   });
-  const cancelBtn = document.getElementById('cancelEditBtn');
-  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ editingQuestionId = null; renderTopicDetail(); });
+
+  const cancelInlineBtn = document.getElementById('cancelInlineQBtn');
+  if(cancelInlineBtn) cancelInlineBtn.addEventListener('click', async ()=>{
+    editingQuestionId = null;
+    await renderTopicDetail();
+  });
+
+  const saveInlineBtn = document.getElementById('saveInlineQBtn');
+  if(saveInlineBtn) saveInlineBtn.addEventListener('click', async ()=>{
+    const qid = editingQuestionId;
+    const row = wrap.querySelector(`[data-question-row="${qid}"]`);
+    if(!row) return;
+    const caseText = row.querySelector('.inline-qcase').value.trim();
+    const optionInputs = [...row.querySelectorAll('.inline-opt')].map(i=>i.value.trim());
+    const checked = row.querySelector('input[name="inlineCorrectOpt"]:checked');
+    const correct = checked ? parseInt(checked.value,10) : 0;
+    const explanation = row.querySelector('.inline-qexplanation').value.trim();
+    if(!caseText || optionInputs.some(o=>!o)){
+      alert('กรุณากรอกเคสและตัวเลือกให้ครบ');
+      return;
+    }
+    saveInlineBtn.disabled=true;
+    saveInlineBtn.textContent='กำลังบันทึก...';
+    await updateDoc(doc(db,'question_bank',selectedTopicId,'questions',qid), {
+      case: caseText, options: optionInputs, correct, explanation
+    });
+    editingQuestionId = null;
+    await renderTopicDetail();
+  });
 
   document.getElementById('addQBtn').addEventListener('click', async ()=>{
     const caseText = document.getElementById('qCase').value.trim();
-    const optionInputs = [...wrap.querySelectorAll('.optInput')].map(i=>i.value.trim());
-    const correct = parseInt(wrap.querySelector('input[name=correctOpt]:checked').value,10);
-    if(!caseText || optionInputs.some(o=>!o)) return;
-    if(editingQuestionId){
-      await updateDoc(doc(db,'question_bank',selectedTopicId,'questions',editingQuestionId), {
-        case: caseText, options: optionInputs, correct, explanation: document.getElementById('qExplanation').value.trim()
-      });
-      editingQuestionId = null;
-    } else {
-      await addDoc(collection(db,'question_bank',selectedTopicId,'questions'), {
-        case: caseText, options: optionInputs, correct, explanation: document.getElementById('qExplanation').value.trim(), createdAt: serverTimestamp()
-      });
+    const optionInputs = [...wrap.querySelectorAll('#optWrap .optInput')].map(i=>i.value.trim());
+    const checked = wrap.querySelector('input[name="newCorrectOpt"]:checked');
+    const correct = checked ? parseInt(checked.value,10) : 0;
+    if(!caseText || optionInputs.some(o=>!o)){
+      alert('กรุณากรอกเคสและตัวเลือกให้ครบ');
+      return;
     }
-    renderTopicDetail();
+    const btn=document.getElementById('addQBtn'); btn.disabled=true; btn.textContent='กำลังบันทึก...';
+    await addDoc(collection(db,'question_bank',selectedTopicId,'questions'), {
+      case: caseText, options: optionInputs, correct, explanation: document.getElementById('qExplanation').value.trim(), createdAt: serverTimestamp()
+    });
+    await renderTopicDetail();
   });
 }
 

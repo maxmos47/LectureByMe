@@ -85,6 +85,45 @@
   @keyframes optionPop{0%{transform:scale(.985)}60%{transform:scale(1.012)}100%{transform:scale(1)}}
   .status-box .big{animation:softAppear .35s ease;}
   @keyframes softAppear{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+  .topbar-actions{display:flex;align-items:center;gap:8px;min-width:0;}
+  .room-chip{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#fff,#eef7f5);border:1px solid #cfe0dd;border-radius:14px;padding:5px 6px 5px 10px;box-shadow:0 2px 8px rgba(11,46,51,.06);white-space:nowrap;}
+  .room-chip-label{font-size:10px;color:#71807d;font-weight:600;}
+  .room-chip strong{font-size:15px;letter-spacing:.12em;color:var(--teal-deep);font-weight:800;}
+  .room-copy{border:0;background:var(--teal);color:#fff;border-radius:9px;padding:6px 8px;font:600 10.5px inherit;cursor:pointer;min-height:28px;}
+  .room-copy:active{transform:scale(.96);}
+  .join-hero{background:linear-gradient(145deg,var(--teal-deep),var(--teal));color:#fff;border:0;overflow:hidden;position:relative;}
+  .join-hero:after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;right:-65px;top:-65px;background:rgba(255,255,255,.08);}
+  .join-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;opacity:.75;margin-bottom:5px;}
+  .join-title{font-size:24px;line-height:1.25;font-weight:700;margin:0 0 7px;}
+  .join-subtitle{font-size:13.5px;opacity:.84;margin:0;max-width:370px;}
+  .join-form-card{margin-top:-2px;position:relative;z-index:2;}
+  .field-wrap{margin-bottom:14px;}
+  .field-wrap input[type=text]{margin-bottom:0;}
+  .room-hint{display:flex;align-items:center;gap:8px;background:var(--teal-soft);border:1px solid #d5e7e4;border-radius:11px;padding:10px 12px;margin:0 0 16px;font-size:12px;color:#526360;}
+  .room-hint-icon{width:24px;height:24px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex:none;}
+  .status-card{position:relative;overflow:hidden;}
+  .status-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(var(--teal),#5ba5aa);}
+  .status-icon{width:52px;height:52px;border-radius:16px;background:var(--teal-soft);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:23px;}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4f9a68;box-shadow:0 0 0 5px rgba(79,154,104,.12);margin-right:7px;animation:pulseLive 1.8s infinite;}
+  @keyframes pulseLive{0%,100%{opacity:1;box-shadow:0 0 0 4px rgba(79,154,104,.10)}50%{opacity:.65;box-shadow:0 0 0 7px rgba(79,154,104,.02)}}
+  .participant-room-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(135deg,#fff,#f1f8f7);border:1px solid #d6e5e2;border-radius:14px;padding:11px 12px;margin-bottom:14px;box-shadow:var(--shadow-sm);}
+  .participant-room-meta{font-size:11px;color:#74817f;}
+  .participant-room-code{font-size:19px;font-weight:800;letter-spacing:.14em;color:var(--teal-deep);line-height:1.1;}
+  .participant-room-share{border:0;background:var(--teal);color:#fff;border-radius:9px;padding:8px 10px;font:600 11px inherit;cursor:pointer;white-space:nowrap;}
+  .leave-class-btn{border:1px solid #e3b8b8;background:#fff7f7;color:#b64242;border-radius:9px;padding:7px 10px;font:600 10.5px inherit;cursor:pointer;white-space:nowrap;transition:.15s ease;}
+  .leave-class-btn:hover{background:#fff0f0;border-color:#d89494;}
+  .leave-class-btn:active{transform:scale(.97);}
+  @media (max-width:420px){
+    .leave-class-btn{padding:6px 8px;font-size:10px;}
+  }
+  @media (max-width:420px){
+    .topbar-actions .badge{display:none!important;}
+    .room-chip{padding-left:8px;}
+    .room-chip strong{font-size:13px;}
+    .room-chip-label{display:none;}
+    .join-title{font-size:22px;}
+  }
 </style>
 </head>
 <body>
@@ -97,7 +136,15 @@
         <h1 id="titleText">เข้าร่วมการบรรยาย</h1>
       </div>
     </div>
-    <span class="badge" id="roleBadge"></span>
+    <div class="topbar-actions">
+      <div class="room-chip" id="roomChip" style="display:none;">
+        <span class="room-chip-label">ห้อง</span>
+        <strong id="roomCodeDisplay">—</strong>
+        <button type="button" class="room-copy" id="copyRoomBtn" aria-label="คัดลอกรหัสห้อง">คัดลอก</button>
+      </div>
+      <button type="button" class="leave-class-btn" id="leaveClassBtn" style="display:none;">ออกจาก Class</button>
+      <span class="badge" id="roleBadge"></span>
+    </div>
   </div>
   <div id="root"><div class="card"><div class="status-box">กำลังเตรียมระบบ...</div></div></div>
 </div>
@@ -105,10 +152,10 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
   collection, query, where, getDocs, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -134,6 +181,10 @@ const REGISTRY_UNUSED = null;
 const root = document.getElementById('root');
 const titleText = document.getElementById('titleText');
 const roleBadge = document.getElementById('roleBadge');
+const roomChip = document.getElementById('roomChip');
+const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+const copyRoomBtn = document.getElementById('copyRoomBtn');
+const leaveClassBtn = document.getElementById('leaveClassBtn');
 
 let uid = null;
 let myStudentId = null;
@@ -169,7 +220,64 @@ function saveParticipantSession(){
 
 function clearParticipantSession(){
   localStorage.removeItem(PARTICIPANT_SESSION_KEY);
+  roomChip.style.display='none';
+  leaveClassBtn.style.display='none';
+  roleBadge.style.display='none';
 }
+
+function updateRoomCodeUI(){
+  const code = classroom?.code || '';
+  if(!code){ roomChip.style.display='none'; return; }
+  roomCodeDisplay.textContent = code;
+  roomChip.style.display='flex';
+  leaveClassBtn.style.display='inline-flex';
+}
+
+async function copyRoomCode(){
+  const code = classroom?.code || '';
+  if(!code) return;
+  try{
+    await navigator.clipboard.writeText(code);
+    const old = copyRoomBtn.textContent;
+    copyRoomBtn.textContent='คัดลอกแล้ว';
+    setTimeout(()=>copyRoomBtn.textContent=old,1400);
+  }catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=code; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); copyRoomBtn.textContent='คัดลอกแล้ว'; setTimeout(()=>copyRoomBtn.textContent='คัดลอก',1400); }catch(err){}
+    ta.remove();
+  }
+}
+copyRoomBtn.addEventListener('click',copyRoomCode);
+
+async function leaveClass(){
+  if(!classroomId || !myStudentId) return;
+  const ok = confirm('ออกจาก Class นี้หรือไม่?\n\nการออกจากห้องจะลบชื่อ คะแนน และคำตอบของคุณออกจากห้องนี้ทันที และหากเข้าร่วมใหม่จะต้องเริ่มทำใหม่');
+  if(!ok) return;
+
+  leaveClassBtn.disabled = true;
+  leaveClassBtn.textContent = 'กำลังออก...';
+  try{
+    if(unsubRoom){ unsubRoom(); unsubRoom=null; }
+    // ลบ participant document ทั้งหมด เพื่อให้คะแนน/คำตอบหายจาก Class ทันที
+    await deleteDoc(doc(db,'classrooms',classroomId,'students',myStudentId));
+    clearParticipantSession();
+
+    // สร้าง Anonymous UID ใหม่เมื่อ Join ครั้งถัดไป เพื่อไม่ให้กลับมาใช้ identity เดิม
+    try{ await signOut(auth); }catch(e){}
+    uid = null; myStudentId=null; classroomId=null; className=''; myName=''; myDept=''; classroom=null;
+    myAnswers={pretestAnswers:{},posttestAnswers:{}};
+    preIdx=0; postIdx=0; preSubmitted=false; postSubmitted=false; showingMySummary=false; questionCache={};
+    root.innerHTML = `<div class="card"><div class="status-box">กำลังออกจาก Class...</div></div>`;
+    await signInAnonymously(auth);
+  }catch(e){
+    console.error('Could not leave class:',e);
+    leaveClassBtn.disabled=false;
+    leaveClassBtn.textContent='ออกจาก Class';
+    alert('ไม่สามารถออกจาก Class ได้ กรุณาลองอีกครั้ง');
+  }
+}
+leaveClassBtn.addEventListener('click',leaveClass);
 
 async function restoreParticipantSession(){
   try{
@@ -203,10 +311,13 @@ async function restoreParticipantSession(){
 
     roleBadge.style.display = 'inline-block';
     roleBadge.textContent = myName + ' · ' + className;
+    classroom = { id:classroomId, ...roomData };
+    updateRoomCodeUI();
     if(unsubRoom) unsubRoom();
     unsubRoom = onSnapshot(roomRef, (snap)=>{
       if(!snap.exists()){ clearParticipantSession(); return; }
       classroom = { id:classroomId, ...snap.data() };
+      updateRoomCodeUI();
       renderParticipant();
     });
     return true;
@@ -246,16 +357,22 @@ async function getQuestion(topicId, qid){
 // ---------- JOIN ----------
 function renderJoin(){
   titleText.textContent = "เข้าร่วมการบรรยาย";
+  roomChip.style.display='none';
+  leaveClassBtn.style.display='none';
+  roleBadge.style.display='none';
   root.innerHTML = `
-    <div class="card">
-      <label for="codeInput">รหัส Classroom</label>
-      <input type="text" id="codeInput" placeholder="เช่น A7K2P" maxlength="8">
-      <label for="nameInput">ชื่อ-นามสกุล</label>
-      <input type="text" id="nameInput" placeholder="เช่น สมหญิง ใจดี">
-      <label for="deptInput">หน่วยงาน (ถ้ามี)</label>
-      <input type="text" id="deptInput" placeholder="เช่น ER">
+    <div class="card join-hero">
+      <div class="join-kicker">ER TRIAGE · PARTICIPANT</div>
+      <div class="join-title">เข้าร่วมกิจกรรม</div>
+      <p class="join-subtitle">กรอกรหัสห้องจากหน้าจอผู้บรรยาย แล้วเริ่มทำกิจกรรมได้ทันที</p>
+    </div>
+    <div class="card join-form-card">
+      <div class="room-hint"><span class="room-hint-icon">🔑</span><span>ขอ <strong>รหัสห้อง</strong> จากผู้บรรยายหรือเพื่อนที่อยู่ในห้อง</span></div>
+      <div class="field-wrap"><label for="codeInput">รหัส Classroom</label><input type="text" id="codeInput" placeholder="เช่น A7K2P" maxlength="8" autocomplete="off"></div>
+      <div class="field-wrap"><label for="nameInput">ชื่อ-นามสกุล</label><input type="text" id="nameInput" placeholder="เช่น สมหญิง ใจดี" autocomplete="name"></div>
+      <div class="field-wrap"><label for="deptInput">หน่วยงาน <span style="font-weight:400;color:#87928f;">(ถ้ามี)</span></label><input type="text" id="deptInput" placeholder="เช่น ER" autocomplete="organization"></div>
       <div class="error-text" id="errText" style="display:none;"></div>
-      <button class="primary" id="joinBtn">เข้าร่วม</button>
+      <button class="primary" id="joinBtn">เข้าร่วมกิจกรรม →</button>
     </div>
   `;
   document.getElementById('joinBtn').addEventListener('click', doJoin);
@@ -314,10 +431,12 @@ async function doJoin(){
 
   roleBadge.style.display = 'inline-block';
   roleBadge.textContent = myName + ' · ' + className;
+  updateRoomCodeUI();
 
   unsubRoom = onSnapshot(doc(db,'classrooms',classroomId), (s)=>{
     if(!s.exists()) return;
     classroom = { id:classroomId, ...s.data() };
+    updateRoomCodeUI();
     renderParticipant();
   });
 }
@@ -330,6 +449,23 @@ function bindBottomLink(){
   document.getElementById('mySummaryLink').addEventListener('click', ()=>{
     showingMySummary = !showingMySummary;
     renderParticipant();
+  });
+}
+
+function participantRoomBanner(){
+  const code = classroom?.code || '—';
+  return `<div class="participant-room-banner">
+    <div><div class="participant-room-meta">รหัสห้อง · แชร์ให้เพื่อนเข้าร่วม</div><div class="participant-room-code">${code}</div></div>
+    <button type="button" class="participant-room-share" id="shareRoomBtn">คัดลอกรหัส</button>
+  </div>`;
+}
+function bindRoomBanner(){
+  const b=document.getElementById('shareRoomBtn');
+  if(!b) return;
+  b.addEventListener('click',async()=>{
+    await copyRoomCode();
+    b.textContent='คัดลอกแล้ว';
+    setTimeout(()=>{ if(document.getElementById('shareRoomBtn')) document.getElementById('shareRoomBtn').textContent='คัดลอกรหัส'; },1400);
   });
 }
 
@@ -347,13 +483,13 @@ async function renderParticipant(){
   }
 
   if(mode === 'lobby'){
-    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">พร้อมแล้ว</div>รอผู้บรรยายเริ่มกิจกรรม</div></div>` + bottomLink();
-    bindBottomLink();
+    root.innerHTML = participantRoomBanner() + `<div class="card status-card"><div class="status-box"><div class="status-icon">⏳</div><div class="big">พร้อมแล้ว</div><span class="live-dot"></span>รอผู้บรรยายเริ่มกิจกรรม</div></div>` + bottomLink();
+    bindRoomBanner(); bindBottomLink();
     return;
   }
   if(mode === 'lecture'){
-    root.innerHTML = `<div class="card"><div class="status-box"><div class="big">กำลังบรรยาย</div>ฟังเนื้อหาต่อได้เลย</div></div>` + bottomLink();
-    bindBottomLink();
+    root.innerHTML = participantRoomBanner() + `<div class="card status-card"><div class="status-box"><div class="status-icon">🎓</div><div class="big"><span class="live-dot"></span>กำลังบรรยาย</div>ฟังเนื้อหาต่อได้เลย</div></div>` + bottomLink();
+    bindRoomBanner(); bindBottomLink();
     return;
   }
   if(mode === 'pretest'){
