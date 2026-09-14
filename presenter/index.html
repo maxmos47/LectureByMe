@@ -691,6 +691,7 @@ function modeControlHtml(){
         <button class="danger" id="mode_ended" style="width:100%; margin-top:10px;">จบการนำเสนอ</button>
       ` : `
         <div class="small-muted" style="margin-top:10px;">จบการนำเสนอแล้ว ผู้ฟังเห็นหน้าขอบคุณ + คะแนนของตัวเอง</div>
+        <button class="danger" id="deleteRoomBtn" style="width:100%; margin-top:10px;">ลบ Classroom นี้ถาวร</button>
       `}
     </div>
     <div class="card">
@@ -720,6 +721,56 @@ function bindModeControl(){
   }
   const resetBtn = document.getElementById('resetRoomBtn');
   if(resetBtn) resetBtn.addEventListener('click', resetClassroom);
+  const deleteBtn = document.getElementById('deleteRoomBtn');
+  if(deleteBtn) deleteBtn.addEventListener('click', deleteClassroom);
+}
+
+async function deleteClassroom(){
+  if(!currentClassroom?.id) return;
+
+  const n = currentStudents.length;
+  const confirmed = confirm(
+    `ยืนยันลบ Classroom "${currentClassroom.name}" ถาวร?\n\n` +
+    `จะลบห้อง รหัส "${currentClassroom.code}" พร้อมผู้เข้าร่วม ${n} คน และคำตอบ/คะแนนทั้งหมดออกจากห้องนี้ถาวร\n\n` +
+    `ไม่สามารถกู้คืนได้ และรหัสห้องนี้จะใช้งานต่อไม่ได้\n\n` +
+    `หากต้องการเก็บผลการอบรม กรุณา Export CSV ก่อนลบ`
+  );
+  if(!confirmed) return;
+
+  const btn = document.getElementById('deleteRoomBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังลบ Classroom...'; }
+
+  const roomId = currentClassroom.id;
+  try{
+    // ยกเลิก realtime listeners ก่อน เพื่อไม่ให้ UI พยายาม render ห้องที่กำลังถูกลบ
+    if(unsubRoom){ unsubRoom(); unsubRoom=null; }
+    if(unsubStudents){ unsubStudents(); unsubStudents=null; }
+
+    // Firestore จะไม่ลบ subcollection ให้อัตโนมัติ จึงต้องลบ students ก่อน
+    const snap = await getDocs(collection(db,'classrooms',roomId,'students'));
+    const docs = snap.docs;
+    for(let i=0; i<docs.length; i+=450){
+      const batch = writeBatch(db);
+      docs.slice(i,i+450).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    await deleteDoc(doc(db,'classrooms',roomId));
+    clearPresenterSession();
+    currentClassroom=null;
+    currentStudents=[];
+    view='classrooms';
+    await render();
+    alert('ลบ Classroom เรียบร้อยแล้ว');
+  }catch(e){
+    console.error('Could not delete classroom:', e);
+    alert('ลบ Classroom ไม่สำเร็จ: ' + e.message);
+    // หาก listener ถูกยกเลิกไปแล้ว ให้กลับหน้า Classroom list เพื่อไม่ให้ค้างอยู่ในห้องที่อาจถูกลบไปแล้ว
+    view='classrooms';
+    currentClassroom=null;
+    currentStudents=[];
+    await render();
+  }
 }
 
 async function resetClassroom(){
