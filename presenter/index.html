@@ -7,7 +7,7 @@
 <title>Triage Session · Presenter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Noto+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --ink:#1B2A2E; --paper:#F5F4F0; --paper-raised:#FFFFFF; --line:#E3E6E2;
@@ -19,10 +19,23 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html{-webkit-text-size-adjust:100%;}
-  body{margin:0; font-family:'IBM Plex Sans Thai','IBM Plex Sans',-apple-system,"Segoe UI",sans-serif;
+  body{margin:0; font-family:'Noto Sans Thai','Noto Sans',-apple-system,"Segoe UI",sans-serif;
     background:var(--paper); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased;}
   .app{max-width:720px; margin:0 auto; padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 48px);}
   @keyframes fadeInUp{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes spin{ to{transform:rotate(360deg);} }
+  @keyframes softPulse{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  .spinner{width:36px; height:36px; border:3px solid var(--line); border-top-color:var(--teal);
+    border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 16px;}
+  .stat-box, .roomrow, .option, .qcheckrow, .topicpill{ animation:fadeInUp .3s ease both; }
+  .stat-box{ transition:transform .15s ease; }
+  .stat-box:hover{ transform:translateY(-2px); }
+  button.primary, button.ghost, button.danger{ transition:transform .12s ease, background .15s ease, box-shadow .2s ease; }
+  @media (hover:hover){
+    button.primary:not(:disabled):hover{ box-shadow:0 6px 18px rgba(18,82,90,.28); transform:translateY(-1px); }
+    .topicpill:hover{ border-color:var(--teal); }
+  }
+  .option.selected .dot, .qcheckrow.checked{ animation:softPulse .5s ease; }
   .card{ animation:fadeInUp .28s ease both; }
 
   .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
@@ -44,9 +57,12 @@
   .classbar{display:flex; align-items:center; justify-content:space-between;
     background:linear-gradient(135deg,var(--teal),var(--teal-deep)); color:#fff; border-radius:var(--radius-lg);
     padding:16px 18px; margin-bottom:16px; font-size:13px; box-shadow:var(--shadow-md);}
-  .classbar .code{font-size:24px; font-weight:700; letter-spacing:.08em; font-family:'IBM Plex Sans',monospace;}
+  .classbar .code{font-size:24px; font-weight:700; letter-spacing:.08em; font-family:'Noto Sans',monospace;}
   .classbar .roomname{opacity:.85; font-size:12px;}
   .classbar .btnrow{display:flex; gap:8px;}
+  .btnrow{display:flex; gap:10px; align-items:center;}
+  .btnrow button.primary{width:auto; flex:2;}
+  .btnrow button.ghost{width:auto; flex:1;}
   .classbar button{background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.3);
     border-radius:20px; padding:8px 14px; font-size:12.5px; cursor:pointer; font-weight:600; min-height:36px;
     transition:background .15s;}
@@ -1211,7 +1227,7 @@ async function renderBank(){
     <div id="topicDetailWrap"></div>
     <div class="card">
       <label style="margin-bottom:8px;">นำเข้าคำถามจากไฟล์ CSV</label>
-      <p class="lead" style="margin-bottom:10px;">คอลัมน์ที่ต้องมี: topic, case, option1, option2, option3, option4, option5, correct (1-5)</p>
+      <p class="lead" style="margin-bottom:10px;">คอลัมน์ที่ต้องมี: topic, case, option1-5, correct (1-5) · เพิ่ม teaching_point ได้ (ไม่บังคับ) สำหรับใส่คำอธิบาย/จุดสอนของแต่ละข้อ</p>
       <button class="ghost" id="downloadTemplateBtn" style="margin-bottom:14px;">ดาวน์โหลด Template CSV</button>
       <div class="filerow">
         <input type="file" id="csvFileInput" accept=".csv">
@@ -1388,8 +1404,8 @@ async function renderTopicDetail(){
 }
 
 function downloadTemplate(){
-  const header = ['topic','case','option1','option2','option3','option4','option5','correct'];
-  const sample = ['เจ็บหน้าอก','ชาย 65 ปี เจ็บแน่นหน้าอกร้าวไปแขนซ้าย BP 90/60','Level 1 (แดง)','Level 2 (ส้ม)','Level 3 (เหลือง)','Level 4 (เขียว)','Level 5 (ขาว)','1'];
+  const header = ['topic','case','option1','option2','option3','option4','option5','correct','teaching_point'];
+  const sample = ['เจ็บหน้าอก','ชาย 65 ปี เจ็บแน่นหน้าอกร้าวไปแขนซ้าย BP 90/60','Level 1 (แดง)','Level 2 (ส้ม)','Level 3 (เหลือง)','Level 4 (เขียว)','Level 5 (ขาว)','1','เจ็บหน้าอกร่วมกับ BP ต่ำ = สงสัย cardiogenic shock ต้องรีบดูแลทันที'];
   const csv = '\uFEFF' + [header,sample].map(r=>r.map(csvEscape).join(',')).join('\r\n');
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1430,8 +1446,8 @@ function handleCsvFile(e){
     }
     const header = rows[0].map(h=>h.trim().toLowerCase());
     const idx = (name)=> header.indexOf(name);
-    const cols = { topic:idx('topic'), case:idx('case'), o1:idx('option1'), o2:idx('option2'), o3:idx('option3'), o4:idx('option4'), o5:idx('option5'), correct:idx('correct') };
-    if(Object.values(cols).some(v=>v===-1)){
+    const cols = { topic:idx('topic'), case:idx('case'), o1:idx('option1'), o2:idx('option2'), o3:idx('option3'), o4:idx('option4'), o5:idx('option5'), correct:idx('correct'), teaching:idx('teaching_point') };
+    if(['topic','case','o1','o2','o3','o4','o5','correct'].some(k => cols[k]===-1)){
       document.getElementById('csvPreviewWrap').innerHTML = `<div class="errtag">คอลัมน์ไม่ครบ ต้องมี: topic, case, option1-5, correct</div>`;
       return;
     }
@@ -1442,12 +1458,13 @@ function handleCsvFile(e){
       const options = [r[cols.o1],r[cols.o2],r[cols.o3],r[cols.o4],r[cols.o5]].map(o=>(o||'').trim());
       const correctRaw = (r[cols.correct]||'').trim();
       const correctNum = parseInt(correctRaw,10);
+      const teaching = cols.teaching!==-1 ? (r[cols.teaching]||'').trim() : '';
       const errors = [];
       if(!topic) errors.push('ไม่มี topic');
       if(!caseText) errors.push('ไม่มี case');
       if(options.some(o=>!o)) errors.push('ตัวเลือกไม่ครบ 5 ข้อ');
       if(!(correctNum>=1 && correctNum<=5)) errors.push('correct ต้องเป็น 1-5');
-      const entry = { rowIdx:rowIdx+2, topic, case:caseText, options, correct: correctNum-1, errors };
+      const entry = { rowIdx:rowIdx+2, topic, case:caseText, options, correct: correctNum-1, explanation: teaching, errors };
       if(errors.length===0) valid.push(entry); else invalid.push(entry);
     });
     csvPreview = { valid, invalid };
@@ -1504,7 +1521,7 @@ async function confirmImport(){
   valid.forEach(v=>{
     const topicId = topicIdCache[v.topic];
     const newRef = doc(collection(db,'question_bank',topicId,'questions'));
-    batch.set(newRef, { case:v.case, options:v.options, correct:v.correct, createdAt: serverTimestamp() });
+    batch.set(newRef, { case:v.case, options:v.options, correct:v.correct, explanation:v.explanation||'', createdAt: serverTimestamp() });
   });
   await batch.commit();
 
